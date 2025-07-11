@@ -51,11 +51,11 @@ const calcularValidadorProducto = (codigoYNombreProductoMga, productoPpal, secto
     const productoPpalStr = String(productoPpal);
     const sectorCuipoStr = String(sectorCuipo);
 
+    // Primera condición: newProductoCuipo es exactamente igual a productoPpal
     if (newProductoCuipo === productoPpalStr) {
         return "PRODUCTO OK";
     }
-    // Asumiendo que 'sector_cuipo' tiene 4 dígitos y 'producto_cuipo' (los primeros 4)
-    // también se comparan si la primera condición no se cumple.
+    // Segunda condición: Los primeros 4 dígitos de newProductoCuipo son iguales a sectorCuipo
     if (newProductoCuipo && newProductoCuipo.substring(0, 4) === sectorCuipoStr) {
         return "PRODUCTO OK";
     }
@@ -82,7 +82,8 @@ const EjecucionPresupuestal = () => {
         'centro_gestor', 'seccion_ptal_cuipo', 'tercero_cuipo', 'secretaria',
         'pospre', 'validacion_pospre', 'pospre_cuipo',
         'proyecto', 'bpin', 'nombre_proyecto',
-        'area_funcional', 'sector_cuipo', 'producto_ppal', 'cantidad_producto', 'producto_a_reportar'
+        'area_funcional', 'sector_cuipo', 'producto_ppal', 'cantidad_producto', 'producto_a_reportar',
+        'detalle_sectorial', 'extrae_detalle_sectorial', 'detalle_sectorial_prog_gasto'
     ];
 
     useEffect(() => {
@@ -106,6 +107,7 @@ const EjecucionPresupuestal = () => {
     const handleCellChange = useCallback(async (recordId, key, value) => {
         let updatedRow = null;
 
+        // Primero, actualizamos el estado local y obtenemos la fila modificada
         setDatosTabla(prevDatos => {
             return prevDatos.map(row => {
                 if (row.id === recordId) {
@@ -133,6 +135,7 @@ const EjecucionPresupuestal = () => {
         });
 
         // === PERSISTIR CAMBIOS EN LA BASE DE DATOS ===
+        // Usamos el 'updatedRow' que ya tiene los valores recalculados
         if (updatedRow) {
             try {
                 // Preparamos los campos a enviar
@@ -257,7 +260,7 @@ const EjecucionPresupuestal = () => {
                             console.log('Rendering ProductMGASelectCell for record:', {
                                 id: record.id,
                                 tiene_producto_mga: record.tiene_producto_mga,
-                                codigo_sap: record.proyecto, // ¡CAMBIAR A record.proyecto!
+                                codigo_sap_prop: record.proyecto, // Cambiado el nombre de la variable para evitar confusión
                                 cantidad_producto: record.cantidad_producto,
                                 producto_ppal: record.producto_ppal,
                                 sector_cuipo: record.sector_cuipo
@@ -270,7 +273,7 @@ const EjecucionPresupuestal = () => {
                                     tieneProductoMga={record.tiene_producto_mga}
                                     productoPpal={record.producto_ppal}
                                     sectorCuipo={record.sector_cuipo}
-                                    codigoSap={record.proyecto} // ¡CAMBIAR A record.proyecto!
+                                    codigoSap={record.proyecto} // Asegurado que se pasa 'record.proyecto'
                                     cantidadProducto={record.cantidad_producto}
                                     onValueChange={handleCellChange}
                                 />
@@ -356,7 +359,8 @@ const EjecucionPresupuestal = () => {
                 { nombre: 'Parte 2 (Centro Gestor)', endpoint: 'ejecucion/procesar/parte2' },
                 { nombre: 'Parte 3 (POSPRE)', endpoint: 'ejecucion/procesar/parte3' },
                 { nombre: 'Parte 4 (Proyecto)', endpoint: 'ejecucion/procesar/parte4' },
-                { nombre: 'Parte 5 (Área Funcional)', endpoint: 'ejecucion/procesar/parte5' }
+                { nombre: 'Parte 5 (Área Funcional)', endpoint: 'ejecucion/procesar/parte5' },
+                { nombre: 'Parte 6 (Detalle Sectorial y Programación de Gasto)', endpoint: 'ejecucion/procesar/parte6' }
             ];
 
             for (let i = 0; i < partes.length; i++) {
@@ -373,8 +377,8 @@ const EjecucionPresupuestal = () => {
                 } catch (error) {
                     console.error(`Error en ${parte.nombre}:`, error);
                     const errorMessage = error.response?.data?.message ||
-                                         error.response?.data?.error ||
-                                         error.message;
+                                             error.response?.data?.error ||
+                                             error.message;
                     message.error(`Error en ${parte.nombre}: ${errorMessage}`);
                     throw error;
                 }
@@ -393,7 +397,7 @@ const EjecucionPresupuestal = () => {
     };
 
     const handleTraerDatosYCopiar = async () => {
-        const tablaOrigen = 'base_de_ejecucion_presupuestal_31032025';
+        const tablaOrigen = 'base_de_ejecucion_presupuestal_30062025';
         const tablaDestino = 'cuipo_plantilla_distrito_2025_vf';
 
         if (!tablasDisponibles.includes(tablaOrigen) || !tablasDisponibles.includes(tablaDestino)) {
