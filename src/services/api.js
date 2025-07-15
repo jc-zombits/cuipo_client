@@ -1,28 +1,26 @@
-// src/services/api.js
 import axios from 'axios';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5005/api/v1/cuipo',
 });
 
-// Interceptor para mostrar detalles de las peticiones
+// Interceptor para añadir el token de autenticación
 api.interceptors.request.use(config => {
-  console.log('Enviando petición a:', config.url);
-  config.headers.Authorization = `Bearer ${process.env.NEXT_PUBLIC_API_KEY}`;
+  const token = localStorage.getItem('cuipoToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
 api.interceptors.response.use(
-  response => {
-    console.log('Respuesta recibida de:', response.config.url);
-    return response;
-  },
+  response => response,
   error => {
-    console.error('Error en la petición:', {
-      url: error.config?.url,
-      status: error.response?.status,
-      data: error.response?.data
-    });
+    if (error.response?.status === 401) {
+      // Token inválido o expirado
+      localStorage.removeItem('cuipoToken');
+      window.location.href = 'http://localhost:3000/login';
+    }
     return Promise.reject(error);
   }
 );
