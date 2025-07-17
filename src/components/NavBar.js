@@ -42,7 +42,7 @@ export default function NavBar() {
 
   const handleSuperAdminRedirect = () => {
     // Redirección al superpanel en puerto 3000
-    window.location.href = 'http://localhost:3000/admin/programs';
+    window.location.href = 'http://10.125.8.55:3000/admin/programs';
   };
 
   const userMenuItems = [

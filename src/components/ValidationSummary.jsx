@@ -76,7 +76,7 @@ const ValidationSummary = () => {
         <>
             <Card
                 title="Estado de Validaciones"
-                bordered={false}
+                variant={'borderless'}
                 style={{
                     width: 300,
                     position: 'fixed',
@@ -133,7 +133,7 @@ const ValidationSummary = () => {
 
             <Modal
                 title={modalTitle}
-                visible={isModalVisible}
+                open={isModalVisible}
                 onCancel={handleModalClose}
                 footer={null}
                 width={700}

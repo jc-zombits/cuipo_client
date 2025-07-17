@@ -11,7 +11,7 @@ export default function ProtectedRoute({ children }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('http://localhost:3000/login');
+      router.push('http://10.125.8.55:3000/login');
     }
   }, [user, loading, router]);
 

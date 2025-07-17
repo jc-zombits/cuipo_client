@@ -6,6 +6,7 @@ import { DownloadOutlined, SyncOutlined, ClearOutlined, CopyOutlined } from '@an
 import axios from 'axios';
 import CpcSelectCell from '@/components/CpcSelectCell';
 import ProductMGASelectCell from '@/components/ProductMGASelectCell'; // Asegúrate de que esta ruta sea correcta
+import api from '@/services/api'
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -90,14 +91,35 @@ const EjecucionPresupuestal = () => {
         obtenerTablasDisponibles();
     }, []);
 
+    //const obtenerTablasDisponibles = async () => {
+    //    try {
+    //        setCargando(true);
+    //        const response = await api.get('/ejecucion/obtener-tablas-disponibles');
+    //        setTablasDisponibles(response.data.tablasDisponibles);
+    //    } catch (error) {
+    //        message.error('Error al obtener tablas disponibles');
+    //        console.error(error);
+    //    } finally {
+    //        setCargando(false);
+    //    }
+    //};
+
     const obtenerTablasDisponibles = async () => {
         try {
             setCargando(true);
-            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/ejecucion/obtener-tablas-disponibles`);
-            setTablasDisponibles(response.data.tablasDisponibles);
+            const response = await api.get('/ejecucion/obtener-tablas-disponibles');
+
+            const tablas = response.data?.tablasDisponibles;
+            if (Array.isArray(tablas)) {
+            setTablasDisponibles(tablas);
+            } else {
+            console.warn('⚠️ tablasDisponibles no es un array:', tablas);
+            setTablasDisponibles([]);
+            }
         } catch (error) {
             message.error('Error al obtener tablas disponibles');
             console.error(error);
+            setTablasDisponibles([]); // fallback seguro en caso de error
         } finally {
             setCargando(false);
         }
@@ -207,9 +229,7 @@ const EjecucionPresupuestal = () => {
             setCargando(true);
             console.log(`Cargando datos de la tabla: ${nombreTabla}`);
 
-            const response = await axios.get(
-                `${process.env.NEXT_PUBLIC_API_URL}/ejecucion/obtener-tablas-disponibles?tabla=${nombreTabla}`
-            );
+            const response = await api.get(`/ejecucion/obtener-tablas-disponibles?tabla=${nombreTabla}`);
 
             console.log('Respuesta del servidor para cargar datos:', response.data);
 
@@ -452,7 +472,7 @@ const EjecucionPresupuestal = () => {
                             option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
                         }
                     >
-                        {tablasDisponibles.map(tabla => (
+                        {Array.isArray(tablasDisponibles) && tablasDisponibles.map(tabla => (
                             <Option key={tabla} value={tabla}>
                                 {tabla}
                             </Option>

@@ -75,7 +75,7 @@ const UserCrud = () => {
   const fetchDependencies = async () => {
     try {
       const token = localStorage.getItem('cuipoToken');
-      const response = await fetch('http://localhost:5001/api/auth/admin/dependencies', {
+      const response = await fetch('http://10.125.8.55:5001/api/auth/admin/dependencies', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -123,7 +123,7 @@ const UserCrud = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('cuipoToken');
-      const response = await fetch('http://localhost:5001/api/auth/admin/users', {
+      const response = await fetch('http://10.125.8.55:5001/api/auth/admin/users', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -177,7 +177,7 @@ const UserCrud = () => {
     if (result.isConfirmed) {
       try {
         const token = localStorage.getItem('cuipoToken');
-        await fetch(`http://localhost:5001/api/auth/admin/users/${id}`, {
+        await fetch(`http://10.125.8.55:5001/api/auth/admin/users/${id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -215,7 +215,7 @@ const UserCrud = () => {
 
       if (currentUser) {
         // Actualizar usuario
-        const response = await fetch(`http://localhost:5001/api/auth/admin/users/${currentUser.id}`, {
+        const response = await fetch(`http://10.125.8.55:5001/api/auth/admin/users/${currentUser.id}`, {
           method: 'PUT',
           headers,
           body: JSON.stringify(userData)
@@ -225,7 +225,7 @@ const UserCrud = () => {
         message.success('Usuario actualizado correctamente');
       } else {
         // Crear usuario
-        const response = await fetch('http://localhost:5001/api/auth/admin/users', {
+        const response = await fetch('http://10.125.8.55:5001/api/auth/admin/users', {
           method: 'POST',
           headers,
           body: JSON.stringify(userData)

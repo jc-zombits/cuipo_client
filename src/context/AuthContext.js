@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
        
         if (token) {
           // Verificar con auth-api
-          const response = await axios.get('http://localhost:5001/api/auth/verify', {
+          const response = await axios.get('http://10.125.8.55:5001/api/auth/verify', {
             headers: { Authorization: `Bearer ${token}` }
           });
 
@@ -77,11 +77,11 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('cuipoToken');
     setUser(null);
-    router.push('http://localhost:3000/login');
+    router.push('http://10.125.8.55:3000/login');
   };
 
   const redirectToAdminPanel = () => {
-    window.location.href = 'http://localhost:3000/admin/users';
+    window.location.href = 'http://10.125.8.55:3000/admin/users';
   };
 
   // Funciones para verificación de roles
