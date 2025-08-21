@@ -4,9 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Statistic, Row, Col, Spin, Modal, List, message } from 'antd';
 import { CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import api from '@/services/api.js'; // Aquí importamos la instancia con token automático
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const ValidationSummary = () => {
     const [summary, setSummary] = useState({
@@ -19,11 +18,10 @@ const ValidationSummary = () => {
     const [modalTitle, setModalTitle] = useState('');
     const [loadingDetails, setLoadingDetails] = useState(false);
 
-    // Función para obtener el resumen de validaciones
     const fetchSummary = async () => {
         setLoadingSummary(true);
         try {
-            const response = await axios.get(`${API_BASE_URL}/estadisticas/resumen`);
+            const response = await api.get(`/estadisticas/resumen`);
             if (response.data?.success) {
                 setSummary(response.data.data);
             } else {
@@ -37,13 +35,12 @@ const ValidationSummary = () => {
         }
     };
 
-    // Función para obtener los detalles de los faltantes
     const fetchDetails = async (type) => {
         setLoadingDetails(true);
         setModalTitle(`Detalle de ${type === 'cpc' ? 'CPC' : 'Producto MGA'} Faltantes`);
         setIsModalVisible(true);
         try {
-            const response = await axios.get(`${API_BASE_URL}/estadisticas/detalles-faltantes/${type}`);
+            const response = await api.get(`/estadisticas/detalles-faltantes/${type}`);
             if (response.data?.success) {
                 setModalData(response.data.data);
             } else {
@@ -61,9 +58,6 @@ const ValidationSummary = () => {
 
     useEffect(() => {
         fetchSummary();
-        // Opcional: Refrescar el resumen cada cierto tiempo si los datos cambian con frecuencia
-        // const intervalId = setInterval(fetchSummary, 60000); // Cada 1 minuto
-        // return () => clearInterval(intervalId);
     }, []);
 
     const handleModalClose = () => {

@@ -3,8 +3,8 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
+import apiAuth from '@/services/apiAuth';
 
 const AuthContext = createContext();
 
@@ -16,43 +16,42 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const verifyToken = async () => {
       try {
-        // 1. Verificar si hay token en la URL (redirección desde auth)
         const params = new URLSearchParams(window.location.search);
         const tokenFromUrl = params.get('token');
-       
-        // 2. O verificar si hay token en localStorage
+
         const token = tokenFromUrl || localStorage.getItem('cuipoToken');
-       
+
         if (token) {
-          // Verificar con auth-api
-          const response = await axios.get('http://10.125.8.55:5001/api/auth/verify', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          // Si el token viene en la URL, lo guardamos antes de verificar
+          if (tokenFromUrl) {
+            localStorage.setItem('cuipoToken', token);
+            window.history.replaceState({}, '', window.location.pathname);
+          }
+
+          // Verificar con auth-api (apiAuth ya pone el Authorization header)
+          const response = await apiAuth.get('/auth/verify');
 
           if (response.data.valid) {
             const decoded = jwtDecode(token);
-            const userData = {
+            setUser({
               id: decoded.id,
               email: decoded.email,
               name: decoded.name,
               role: decoded.role,
-              id_role_user: decoded.id_role_user // Añadido para compatibilidad
-            };
-            setUser(userData);
-           
-            // Guardar token si vino de URL
-            if (tokenFromUrl) {
-              localStorage.setItem('cuipoToken', token);
-              // Limpiar URL
-              window.history.replaceState({}, '', window.location.pathname);
-            }
+              id_role_user: decoded.id_role_user,
+              dependencyName: decoded.dependencyName
+            });
           } else {
-            logout();
+            localStorage.removeItem('cuipoToken');
+            setUser(null);
           }
+        } else {
+          setUser(null);
         }
       } catch (error) {
         console.error('Error verifying token:', error);
-        logout();
+        localStorage.removeItem('cuipoToken');
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -64,24 +63,24 @@ export const AuthProvider = ({ children }) => {
   const login = (token) => {
     localStorage.setItem('cuipoToken', token);
     const decoded = jwtDecode(token);
-    const userData = {
+    setUser({
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
       role: decoded.role,
-      id_role_user: decoded.id_role_user
-    };
-    setUser(userData);
+      id_role_user: decoded.id_role_user,
+      dependencyName: decoded.dependencyName
+    });
   };
 
   const logout = () => {
     localStorage.removeItem('cuipoToken');
     setUser(null);
-    router.push('http://10.125.8.55:3000/login');
+    window.location.replace('http://10.125.126.107:3000/login');
   };
 
   const redirectToAdminPanel = () => {
-    window.location.href = 'http://10.125.8.55:3000/admin/users';
+    window.location.href = 'http://10.125.126.107:3000/admin/users';
   };
 
   // Funciones para verificación de roles
@@ -113,4 +112,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

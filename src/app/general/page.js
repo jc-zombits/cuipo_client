@@ -33,7 +33,7 @@ export default function Home() {
   };
 
   const api = axios.create({
-    baseURL: 'http://10.125.8.55:5005/api/v1/cuipo',
+    baseURL: 'http://10.125.126.107:5005/api/v1/cuipo',
   });
 
   // Estilos reutilizables

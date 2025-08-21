@@ -56,11 +56,27 @@ const CpcSelectCell = ({ value, recordId, tieneCpc, onValueChange }) => {
         fetchCpcOptions();
     }, [tieneCpc]); // Se ejecuta cuando tieneCpc de la fila cambia
 
+    //const handleChange = (newValue) => {
+        //onValueChange(recordId, 'codigo_y_nombre_del_cpc', newValue);
+            //onValueChange(recordId, {
+            //codigo_y_nombre_del_cpc: newValue,
+            //cpc_cuipo: newCpcCuipo,
+            //validador_cpc: newValidadorCpc
+        //});
+    //};
+
     const handleChange = (newValue) => {
+        // Encontrar la opción seleccionada para obtener el cpc_cuipo
+        const selectedOption = options.find(opt => opt.value === newValue);
+        
+        // ✅ Definir newCpcCuipo basado en la opción seleccionada
+        const newCpcCuipo = selectedOption?.cpc_codigo || null;
+        const newValidadorCpc = 'PENDIENTE'; // o lógica de validación
+        
         onValueChange(recordId, 'codigo_y_nombre_del_cpc', newValue);
-            onValueChange(recordId, {
-            codigo_y_nombre_del_cpc: selectedValue,
-            cpc_cuipo: newCpcCuipo,
+        onValueChange(recordId, {
+            codigo_y_nombre_del_cpc: newValue,
+            cpc_cuipo: newCpcCuipo, // ✅ Ahora está definida
             validador_cpc: newValidadorCpc
         });
     };

@@ -178,7 +178,7 @@ const EjecucionPresupuestal = () => {
                 }
 
                 // Asume que tienes un endpoint para actualizar una celda o fila
-                await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/ejecucion/actualizar-fila`, fieldsToUpdate);
+                await api.post('/ejecucion/actualizar-fila', fieldsToUpdate);
                 message.success('Campo actualizado exitosamente en la base de datos.');
             } catch (error) {
                 console.error('Error al persistir el cambio en la base de datos:', error);

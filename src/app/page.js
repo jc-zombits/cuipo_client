@@ -1,4 +1,4 @@
-// app/PresupuestoGrafica.js (o tu page.js)
+// app/page.js
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
@@ -6,9 +6,13 @@ import { Card, Select, Spin, Typography, message, Row, Col, Modal } from 'antd';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import { DatabaseOutlined } from '@ant-design/icons';
+import { useAuth } from '../context/AuthContext';
 
 // Importa el nuevo componente ValidationSummary
 import ValidationSummary from '../components/ValidationSummary.jsx';
+
+// Importa la instancia axios con interceptor de token
+import api from '@/services/api';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -23,10 +27,14 @@ const parseFormattedNumber = (numStr) => {
 };
 
 export default function PresupuestoGrafica() {
+    const { user, isAdmin, isJuanLaver } = useAuth();
+    
     // === ESTADOS PARA LA PRIMERA GRÁFICA (Proyectos por Secretarías) ===
     const [proyectosPorSecretariaData, setProyectosPorSecretariaData] = useState([]);
+    // Inicializar selectedSecretariaFilter
     const [selectedSecretariaFilter, setSelectedSecretariaFilter] = useState(null);
     const [loadingProyectosPorSecretaria, setLoadingProyectosPorSecretaria] = useState(true);
+    const [loadingProyectos, setLoadingProyectos] = useState(false);
 
     // === ESTADOS PARA LA SEGUNDA GRÁFICA (Ejecución Financiera) ===
     const [detalleData, setDetalleData] = useState([]);
@@ -45,10 +53,46 @@ export default function PresupuestoGrafica() {
         const fetchProyectosPorSecretaria = async () => {
             try {
                 setLoadingProyectosPorSecretaria(true);
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/estadisticas/proyectos_por_secretaria`);
-                const result = await res.json();
+                const res = await api.get('/estadisticas/proyectos_por_secretaria');
+                const result = res.data;
+
                 if (result.success && Array.isArray(result.data)) {
-                    setProyectosPorSecretariaData(result.data);
+                    if (result.data.length === 0) {
+                        setProyectosPorSecretariaData([]);
+                        return;
+                    }
+
+                    const processedData = result.data.map(item => ({
+                        ...item,
+                        centro_gestor: item.centro_gestor || '',
+                        dependencia_nombre_completo: item.dependencia_nombre_completo || '',
+                        secretaria: item.secretaria || 'Sin Secretaría',
+                        total_proyectos: parseInt(item.total_proyectos || 0)
+                    }));
+
+                    // Para usuarios normales con dependencia, filtrar y establecer automáticamente
+                    if (!isAdmin() && !isJuanLaver() && user?.dependencyName) {
+                        const filteredData = processedData.filter(item => {
+                            const itemKey = item.centro_gestor && item.dependencia_nombre_completo
+                                ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
+                                : item.secretaria;
+                            return itemKey === user.dependencyName || 
+                                   (item.dependencia_nombre_completo && item.dependencia_nombre_completo.includes(user.dependencyName)) ||
+                                   (item.secretaria && item.secretaria.includes(user.dependencyName));
+                        });
+                        
+                        if (filteredData.length > 0) {
+                            const dependencyKey = filteredData[0].centro_gestor && filteredData[0].dependencia_nombre_completo
+                                ? `${filteredData[0].centro_gestor} - ${filteredData[0].dependencia_nombre_completo}`
+                                : filteredData[0].secretaria;
+                            setSelectedSecretariaFilter(dependencyKey);
+                            setProyectosPorSecretariaData(filteredData);
+                        } else {
+                            setProyectosPorSecretariaData([]);
+                        }
+                    } else {
+                        setProyectosPorSecretariaData(processedData);
+                    }
                 } else {
                     message.error('Error al cargar datos de proyectos por secretaría.');
                     setProyectosPorSecretariaData([]);
@@ -62,176 +106,217 @@ export default function PresupuestoGrafica() {
             }
         };
         fetchProyectosPorSecretaria();
-    }, []);
+    }, [isAdmin, isJuanLaver, user]);
+
 
     // --- Cargar TODOS los proyectos para la secretaría seleccionada (PARA EL SEGUNDO SELECT) ---
-    useEffect(() => {
-        const fetchAllProjectsForSecretaria = async () => {
-            if (!selectedSecretariaFilter) {
-                setAllProjectsForSelectedSecretaria([]);
-                setSelectedProyectoFilter(null);
-                setDetalleData([]);
-                return;
-            }
-
-            setLoadingDetalleProyecto(true);
-            try {
-                const params = new URLSearchParams();
-                const parts = selectedSecretariaFilter.split(' - ');
-                const secretariaParaApi = parts.length > 1 ? parts[1] : selectedSecretariaFilter;
-                params.append('secretaria', encodeURIComponent(secretariaParaApi));
-
-                const url = `${process.env.NEXT_PUBLIC_API_URL}/estadisticas/detalle_proyecto?${params.toString()}`;
-                const res = await fetch(url);
-                const result = await res.json();
-
-                if (result.success && Array.isArray(result.data)) {
-                    // Pre-procesar los datos aquí para eliminar comas en números si es necesario
-                    const processedData = result.data.map(item => {
-                        const newItem = { ...item };
-                        for (const key in newItem) {
-                            // Solo procesar si el valor es string y no es un campo de texto que DEBA conservar comas (ej. direcciones, nombres)
-                            // Asumo que todos los campos que no sean 'secretaria', 'nombre_proyecto', 'fuente', 'pospre', 'proyecto_' son numéricos
-                            if (typeof newItem[key] === 'string' && !['secretaria', 'nombre_proyecto', 'fuente', 'pospre', 'proyecto_'].includes(key)) {
-                                newItem[key] = newItem[key].replace(/,/g, ''); // Eliminar comas
-                            }
-                        }
-                        return newItem;
-                    });
-                    setAllProjectsForSelectedSecretaria(processedData);
-                    setDetalleData([]);
-                    setSelectedProyectoFilter(null);
-                } else {
-                    message.error('Error al cargar proyectos para la secretaría seleccionada.');
-                    setAllProjectsForSelectedSecretaria([]);
+    const fetchAllProjectsForSecretaria = async (secretariaParaApi) => {
+        try {
+            setLoadingProyectos(true);
+            const res = await api.get('/estadisticas/proyectos_por_secretaria', {
+                params: { secretaria: secretariaParaApi }
+            });
+            console.log('Respuesta de la API:', res.data);
+            if (res.data.success && Array.isArray(res.data.data)) {
+                const secretariaData = res.data.data.find(d => d.secretaria === secretariaParaApi);
+                if (secretariaData && Array.isArray(secretariaData.proyectos)) {
+                    console.log('Proyectos recibidos:', secretariaData.proyectos);
+                    setAllProjectsForSelectedSecretaria(secretariaData.proyectos);
                 }
-            } catch (err) {
-                console.error('Error al cargar proyectos por secretaria (para select de proyectos):', err);
-                message.error('Error de red al cargar proyectos.');
+            } else {
+                console.log('No se encontraron proyectos o formato inválido');
                 setAllProjectsForSelectedSecretaria([]);
-            } finally {
-                setLoadingDetalleProyecto(false);
             }
-        };
-        fetchAllProjectsForSecretaria();
+        } catch (error) {
+            console.error('Error al cargar proyectos:', error);
+            message.error('Error al cargar los proyectos');
+            setAllProjectsForSelectedSecretaria([]);
+        } finally {
+            setLoadingProyectos(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedSecretariaFilter) {
+            const parts = selectedSecretariaFilter.split(' - ');
+            const secretariaParaApi = parts.length > 1 ? parts[1] : selectedSecretariaFilter;
+            fetchAllProjectsForSecretaria(secretariaParaApi);
+        } else {
+            setAllProjectsForSelectedSecretaria([]);
+            setSelectedProyectoFilter(null);
+            setDetalleData([]);
+        }
     }, [selectedSecretariaFilter]);
+
+    const proyectosOptionsForSelect = useMemo(() => {
+        console.log('Datos completos de proyectos:', allProjectsForSelectedSecretaria);
+        if (!Array.isArray(allProjectsForSelectedSecretaria) || allProjectsForSelectedSecretaria.length === 0) {
+            return [];
+        }
+        return allProjectsForSelectedSecretaria
+            .filter(proyecto => proyecto && proyecto.codigo && proyecto.nombre)
+            .map((proyecto, index) => ({
+                value: `${proyecto.codigo}-${proyecto.fuente}-${index}`,
+                label: `${proyecto.codigo} - ${proyecto.nombre} (${proyecto.fuente})`
+            }))
+            .sort((a, b) => a.value.localeCompare(b.value));
+    }, [allProjectsForSelectedSecretaria]);
 
     // --- Cargar detalles para la gráfica de "Ejecución Financiera" (GRÁFICA 2) ---
     useEffect(() => {
         const fetchDetalle = async () => {
-            if (!selectedProyectoFilter) {
+            if (!selectedProyectoFilter || !selectedSecretariaFilter) {
                 setDetalleData([]);
                 return;
             }
 
             setLoadingDetalleProyecto(true);
             try {
-                const params = new URLSearchParams();
                 const parts = selectedSecretariaFilter.split(' - ');
                 const secretariaParaApi = parts.length > 1 ? parts[1] : selectedSecretariaFilter;
 
-                params.append('secretaria', encodeURIComponent(secretariaParaApi));
-                params.append('proyecto', encodeURIComponent(selectedProyectoFilter));
+                // ✅ Obtener el código COMPLETO del proyecto (no cortar a 6 caracteres)
+                const [codigoCompleto] = selectedProyectoFilter.split('-');
+                
+                console.log('DEBUG - Parámetros para gráfica:', {
+                    secretariaParaApi,
+                    codigoCompleto,
+                    selectedProyectoFilter
+                });
 
-                const url = `${process.env.NEXT_PUBLIC_API_URL}/estadisticas/detalle_proyecto?${params.toString()}`;
-                const res = await fetch(url);
-                const result = await res.json();
+                // ✅ Usar el NUEVO endpoint específico para la gráfica
+                const response = await api.get('/estadisticas/datos_grafica_proyecto', {
+                    params: {
+                        secretaria: secretariaParaApi,
+                        proyecto: codigoCompleto // ✅ Código completo
+                    }
+                });
+                
+                console.log('DEBUG - Respuesta del nuevo endpoint:', response.data);
 
-                if (result.success && Array.isArray(result.data)) {
-                    // Pre-procesar los datos aquí también antes de guardarlos en detalleData
-                    const processedData = result.data.map(item => {
-                        const newItem = { ...item };
-                        for (const key in newItem) {
-                            if (typeof newItem[key] === 'string' && !['secretaria', 'nombre_proyecto', 'fuente', 'pospre', 'proyecto_'].includes(key)) {
-                                newItem[key] = newItem[key].replace(/,/g, '');
-                            }
-                        }
-                        return newItem;
-                    });
-                    setDetalleData(processedData);
+                if (response.data.success && response.data.data) {
+                    // ✅ Procesar el objeto individual (no array)
+                    const datos = response.data.data;
+                    const processedData = {
+                        ...datos,
+                        // Limpiar comas de los campos numéricos
+                        ppto_inicial: typeof datos.ppto_inicial === 'string' ? datos.ppto_inicial.replace(/,/g, '') : datos.ppto_inicial,
+                        total_ppto_actual: typeof datos.total_ppto_actual === 'string' ? datos.total_ppto_actual.replace(/,/g, '') : datos.total_ppto_actual,
+                        disponibilidad: typeof datos.disponibilidad === 'string' ? datos.disponibilidad.replace(/,/g, '') : datos.disponibilidad,
+                        disponible_neto: typeof datos.disponible_neto === 'string' ? datos.disponible_neto.replace(/,/g, '') : datos.disponible_neto,
+                        ejecucion_porcentaje: typeof datos.ejecucion_porcentaje === 'string' ? datos.ejecucion_porcentaje.replace(/,/g, '') : datos.ejecucion_porcentaje
+                    };
+                    
+                    console.log('DEBUG - Datos procesados para gráfica:', processedData);
+                    setDetalleData([processedData]); // ✅ Poner como array con un elemento
                 } else {
-                    message.error('Error al cargar detalle de ejecución para el proyecto.');
+                    console.warn('No se encontraron datos para la gráfica:', response.data);
+                    message.warning('No se encontraron datos de ejecución para este proyecto.');
                     setDetalleData([]);
                 }
             } catch (err) {
-                console.error('Error al cargar detalle del proyecto:', err);
-                message.error('Error de red al cargar detalle del proyecto.');
+                console.error('Error al cargar datos para gráfica:', err);
+                if (err.response?.status === 404) {
+                    message.warning('El endpoint para gráficas no está disponible aún.');
+                } else {
+                    message.error('Error de red al cargar datos para gráfica.');
+                }
                 setDetalleData([]);
             } finally {
                 setLoadingDetalleProyecto(false);
             }
         };
+
         fetchDetalle();
     }, [selectedProyectoFilter, selectedSecretariaFilter]);
 
+
     // --- Lógica de filtrado y opciones para los Selects ---
     const filteredProyectosPorSecretaria = useMemo(() => {
-        if (!selectedSecretariaFilter) {
-            const aggregatedData = {};
-            proyectosPorSecretariaData.forEach(item => {
-                const key = item.centro_gestor && item.dependencia_nombre_completo
-                    ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
-                    : item.secretaria || 'Sin Secretaría Asociada';
-                if (!aggregatedData[key]) {
-                    aggregatedData[key] = {
-                        secretaria: item.secretaria,
-                        centro_gestor: item.centro_gestor,
-                        dependencia_nombre_completo: item.dependencia_nombre_completo,
-                        total_proyectos: 0,
-                    };
-                }
-                aggregatedData[key].total_proyectos += parseInt(item.total_proyectos || 0);
-            });
-            return Object.values(aggregatedData);
+        if (!proyectosPorSecretariaData || proyectosPorSecretariaData.length === 0) {
+            return [];
         }
 
-        const [filterCentroGestor, filterDependencia] = selectedSecretariaFilter.split(' - ');
-        const dataToFilter = proyectosPorSecretariaData.filter(d => {
-            const matchFull = d.centro_gestor === filterCentroGestor && d.dependencia_nombre_completo === filterDependencia;
-            const matchSecretariaOnly = !d.centro_gestor && d.secretaria === selectedSecretariaFilter;
-            return matchFull || matchSecretariaOnly;
-        });
-
-        const aggregatedFilteredData = {};
-        dataToFilter.forEach(item => {
-            const key = item.secretaria || 'Sin Secretaría Asociada';
-            if (!aggregatedFilteredData[key]) {
-                aggregatedFilteredData[key] = {
+        // Primero, agregamos todos los datos disponibles
+        const aggregatedData = {};
+        proyectosPorSecretariaData.forEach(item => {
+            const key = item.centro_gestor && item.dependencia_nombre_completo
+                ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
+                : item.secretaria || 'Sin Secretaría Asociada';
+            
+            if (!aggregatedData[key]) {
+                aggregatedData[key] = {
                     secretaria: item.secretaria,
                     centro_gestor: item.centro_gestor,
                     dependencia_nombre_completo: item.dependencia_nombre_completo,
                     total_proyectos: 0,
                 };
             }
-            aggregatedFilteredData[key].total_proyectos += parseInt(item.total_proyectos || 0);
+            aggregatedData[key].total_proyectos += parseInt(item.total_proyectos || 0);
         });
-        return Object.values(aggregatedFilteredData);
 
-    }, [proyectosPorSecretariaData, selectedSecretariaFilter]);
+        // Luego, filtramos según el rol y la selección
+        let filteredData = Object.values(aggregatedData);
+
+        // Si hay un filtro de secretaría seleccionado, aplicarlo independientemente del rol
+        if (selectedSecretariaFilter) {
+            filteredData = filteredData.filter(item => {
+                const itemKey = item.centro_gestor && item.dependencia_nombre_completo
+                    ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
+                    : item.secretaria;
+                return itemKey === selectedSecretariaFilter;
+            });
+        }
+        // Si no hay filtro seleccionado y es un usuario normal con dependencia, filtrar por su dependencia
+        else if (!isAdmin() && !isJuanLaver() && user?.dependencyName) {
+            filteredData = filteredData.filter(item => {
+                const itemKey = item.centro_gestor && item.dependencia_nombre_completo
+                    ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
+                    : item.secretaria;
+                return itemKey === user.dependencyName || 
+                       (item.dependencia_nombre_completo && item.dependencia_nombre_completo.includes(user.dependencyName)) ||
+                       (item.secretaria && item.secretaria.includes(user.dependencyName));
+            });
+        }
+
+        return filteredData;
+    }, [proyectosPorSecretariaData, selectedSecretariaFilter, user, isAdmin, isJuanLaver]);
 
     const secretariasOptionsForSelect = useMemo(() => {
+        // Si no hay datos, retornar array vacío
+        if (!proyectosPorSecretariaData || proyectosPorSecretariaData.length === 0) {
+            return [];
+        }
+
+        // Obtener todas las opciones únicas disponibles
         const uniqueOptions = new Set();
         proyectosPorSecretariaData.forEach(d => {
+            // Priorizar la combinación de centro_gestor y dependencia_nombre_completo
             if (d.centro_gestor && d.dependencia_nombre_completo) {
                 uniqueOptions.add(`${d.centro_gestor} - ${d.dependencia_nombre_completo}`);
             } else if (d.secretaria) {
                 uniqueOptions.add(d.secretaria);
             }
         });
-        return Array.from(uniqueOptions).sort();
-    }, [proyectosPorSecretariaData]);
 
-    const proyectosOptionsForSelect = useMemo(() => {
-        if (!selectedSecretariaFilter || allProjectsForSelectedSecretaria.length === 0) return [];
+        const sortedOptions = Array.from(uniqueOptions).sort((a, b) => a.localeCompare(b));
 
-        const uniqueProyectos = new Set();
-        allProjectsForSelectedSecretaria.forEach(d => {
-            if (d.proyecto_) {
-                uniqueProyectos.add(d.proyecto_);
-            }
-        });
-        return Array.from(uniqueProyectos).sort();
-    }, [allProjectsForSelectedSecretaria, selectedSecretariaFilter]);
+        // Para usuarios admin o juanlaver, mostrar todas las opciones
+        if (isAdmin() || isJuanLaver()) {
+            return sortedOptions;
+        }
+
+        // Para usuarios normales con dependencia, mostrar solo su dependencia
+        if (user?.dependencyName) {
+            return sortedOptions.filter(option => 
+                option === user.dependencyName || 
+                option.includes(user.dependencyName)
+            );
+        }
+
+        // Si no hay dependencia asignada, mostrar todas las opciones
+        return sortedOptions;
+    }, [proyectosPorSecretariaData, user, isAdmin, isJuanLaver]);
 
     const handleSecretariaChange = useCallback((value) => {
         setSelectedSecretariaFilter(value);
@@ -248,39 +333,72 @@ export default function PresupuestoGrafica() {
         if (!selectedProyectoFilter || !selectedSecretariaFilter) return;
 
         setLoadingModalData(true);
-        setIsModalVisible(true); // Mostrar el modal mientras carga
+        setIsModalVisible(true);
 
         try {
-            const params = new URLSearchParams();
             const parts = selectedSecretariaFilter.split(' - ');
             const secretariaParaApi = parts.length > 1 ? parts[1] : selectedSecretariaFilter;
 
-            params.append('secretaria', encodeURIComponent(secretariaParaApi));
-            params.append('proyecto', encodeURIComponent(selectedProyectoFilter));
+            // ✅ Obtener el código COMPLETO del proyecto
+            const [codigoCompleto] = selectedProyectoFilter.split('-');
+            
+            console.log('🔍 DEBUG - Modal - Parámetros enviados:', {
+                secretaria: secretariaParaApi,
+                proyecto: codigoCompleto,
+                selectedProyectoFilter
+            });
 
-            const url = `${process.env.NEXT_PUBLIC_API_URL}/estadisticas/detalle_proyecto?${params.toString()}`;
-            const res = await fetch(url);
-            const result = await res.json();
-
-            if (result.success && Array.isArray(result.data) && result.data.length > 0) {
-                // El API devuelve una lista de objetos. Tomamos el primer elemento y lo procesamos.
-                const rawData = result.data[0];
-                const processedItem = {};
-                for (const key in rawData) {
-                    if (typeof rawData[key] === 'string' && !['secretaria', 'nombre_proyecto', 'fuente', 'pospre', 'proyecto_'].includes(key)) {
-                        processedItem[key] = rawData[key].replace(/,/g, ''); // Eliminar comas para asegurar un parseFloat correcto
-                    } else {
-                        processedItem[key] = rawData[key];
-                    }
+            const response = await api.get('/estadisticas/detalle_proyecto', {
+                params: {
+                    secretaria: secretariaParaApi,
+                    proyecto: codigoCompleto
                 }
-                setModalData(processedItem);
+            });
+            
+            console.log('🔍 DEBUG - Modal - Respuesta completa:', {
+                status: response.status,
+                data: response.data,
+                url: response.config.url
+            });
+
+            // ✅ Verificación más detallada
+            if (response.data && response.data.success) {
+                if (Array.isArray(response.data.data) && response.data.data.length > 0) {
+                    const rawData = response.data.data[0];
+                    console.log('🔍 DEBUG - Modal - Primer registro:', rawData);
+                    
+                    const processedItem = {};
+                    for (const key in rawData) {
+                        if (typeof rawData[key] === 'string' && !['secretaria', 'nombre_proyecto', 'fuente', 'pospre', 'proyecto_'].includes(key)) {
+                            processedItem[key] = rawData[key].replace(/,/g, '');
+                        } else {
+                            processedItem[key] = rawData[key];
+                        }
+                    }
+                    
+                    console.log('🔍 DEBUG - Modal - Datos procesados:', processedItem);
+                    setModalData(processedItem);
+                    return; // Salir exitosamente
+                } else {
+                    console.warn('🔍 DEBUG - Modal - Array vacío o no array:', response.data.data);
+                }
             } else {
-                message.error('No se encontraron datos detallados para mostrar en el modal.');
-                setModalData({});
+                console.warn('🔍 DEBUG - Modal - success: false o estructura incorrecta:', response.data);
             }
+            
+            // ✅ Si llegamos aquí, hay algún problema con los datos
+            message.warning('No se encontraron datos detallados para este proyecto.');
+            setModalData({});
+
         } catch (err) {
-            console.error('Error al cargar datos del modal:', err);
-            message.error('Error de red al cargar datos del modal.');
+            console.error('🔍 DEBUG - Modal - Error completo:', {
+                message: err.message,
+                response: err.response?.data,
+                status: err.response?.status,
+                config: err.config
+            });
+            
+            message.error('Error de conexión: ' + (err.response?.data?.message || err.message));
             setModalData({});
         } finally {
             setLoadingModalData(false);
@@ -419,9 +537,7 @@ export default function PresupuestoGrafica() {
         },
         xAxis: {
             categories: [
-                'Ppto Inicial', 'Reducciones', 'Adiciones', 'Créditos', 'Contracréditos',
-                'Total Ppto Actual', 'Disponibilidad', 'Compromiso', 'Factura', 'Pagos',
-                'Disponible Neto', 'Ejecución (%)'
+                'Ppto Inicial', 'Total Ppto Actual', 'Disponibilidad', 'Disponible Neto', 'Ejecución (%)'
             ],
             labels: {
                 rotation: -45,
@@ -503,17 +619,10 @@ export default function PresupuestoGrafica() {
                 data: selectedProyectoFilter && detalleData.length > 0
                     ? [
                         parseFormattedNumber(detalleData[0].ppto_inicial),
-                        parseFormattedNumber(detalleData[0].reducciones),
-                        parseFormattedNumber(detalleData[0].adiciones),
-                        parseFormattedNumber(detalleData[0].creditos),
-                        parseFormattedNumber(detalleData[0].contracreditos),
                         parseFormattedNumber(detalleData[0].total_ppto_actual),
                         parseFormattedNumber(detalleData[0].disponibilidad),
-                        parseFormattedNumber(detalleData[0].compromiso),
-                        parseFormattedNumber(detalleData[0].factura),
-                        parseFormattedNumber(detalleData[0].pagos),
                         parseFormattedNumber(detalleData[0].disponible_neto),
-                        parseFormattedNumber(detalleData[0]._ejecucion) // Sigue siendo el porcentaje
+                        parseFormattedNumber(detalleData[0]._ejecucion)
                     ]
                     : [],
                 color: '#F28E2B'
@@ -569,19 +678,22 @@ export default function PresupuestoGrafica() {
                                 <div style={{ marginBottom: '16px' }}>
                                     <Text strong style={{ display: 'block', marginBottom: '8px', color: "#093fb4", fontSize: "16px" }}>Filtrar por Secretaría:</Text>
                                     <Select
-                                        allowClear
+                                        allowClear={!user?.dependencyName}
                                         showSearch
                                         placeholder="Todas las Secretarías"
                                         style={{ width: '100%' }}
                                         onChange={handleSecretariaChange}
                                         value={selectedSecretariaFilter}
+                                        disabled={!isAdmin() && !isJuanLaver() && user?.dependencyName}
                                         filterOption={(input, option) =>
                                             (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                                         }
                                     >
-                                        {secretariasOptionsForSelect.map(optionText => (
-                                            <Select.Option key={optionText} value={optionText}>{optionText}</Select.Option>
-                                        ))}
+                                        {(!isAdmin() && !isJuanLaver() && user?.dependencyName)
+                                            ? <Select.Option key={user.dependencyName} value={user.dependencyName}>{user.dependencyName}</Select.Option>
+                                            : secretariasOptionsForSelect.map(optionText => (
+                                                <Select.Option key={optionText} value={optionText}>{optionText}</Select.Option>
+                                            ))}
                                     </Select>
                                 </div>
                                 <HighchartsReact
@@ -605,15 +717,13 @@ export default function PresupuestoGrafica() {
                                         style={{ width: '100%' }}
                                         onChange={handleProyectoChange}
                                         value={selectedProyectoFilter}
-                                        disabled={!selectedSecretariaFilter || proyectosOptionsForSelect.length === 0}
+                                        disabled={!selectedSecretariaFilter || loadingProyectos}
                                         filterOption={(input, option) =>
-                                            (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                                         }
-                                    >
-                                        {proyectosOptionsForSelect.map(proyecto => (
-                                            <Select.Option key={proyecto} value={proyecto}>{proyecto}</Select.Option>
-                                        ))}
-                                    </Select>
+                                        options={proyectosOptionsForSelect}
+                                        loading={loadingProyectos}
+                                    />
                                 </div>
                                 <HighchartsReact
                                     highcharts={Highcharts}

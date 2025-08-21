@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Select, message } from 'antd';
-import axios from 'axios';
+//import axios from 'axios';
 import debounce from 'lodash/debounce';
+import api from '@/services/api';
 
 const { Option } = Select;
 
@@ -38,8 +39,8 @@ const ProductMGASelectCell = ({
 
         setLoading(true);
         try {
-            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
-            const response = await axios.get(`${API_BASE_URL}/ejecucion/productos-mga-options`, {
+            //const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+            const response = await api.get('/ejecucion/productos-mga-options', {
                 params: { codigoSap: sapCode }
             });
 
@@ -98,8 +99,8 @@ const ProductMGASelectCell = ({
         if (!productValue || productValue === "NO APLICA") return;
 
         try {
-            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
-            const response = await axios.post(`${API_BASE_URL}/ejecucion/validar-producto`, {
+            //const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+            const response = await api.post('/ejecucion/validar-producto', {
                 codigo_y_nombre_del_producto_mga: productValue,
                 producto_ppal: ppal,
                 sector_cuipo: sector
