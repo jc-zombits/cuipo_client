@@ -74,6 +74,8 @@ const EjecucionPresupuestal = () => {
     const [ejecutando, setEjecutando] = useState(false);
     const [copiandoDatos, setCopiandoDatos] = useState(false);
     const [progreso, setProgreso] = useState(0);
+    const [proyectosConsolidados, setProyectosConsolidados] = useState([]);
+    const [cargandoConsolidados, setCargandoConsolidados] = useState(false);
 
     const camposPresupuestalesResaltar = [
         'ppto_inicial', 'reducciones', 'adiciones', 'creditos', 'contracreditos',
@@ -124,6 +126,29 @@ const EjecucionPresupuestal = () => {
             setCargando(false);
         }
     };
+
+    // NUEVA función: obtener proyectos consolidados
+    const obtenerProyectosConsolidados = async () => {
+        try {
+            setCargandoConsolidados(true);
+            const response = await api.get('/estadisticas/proyectos-consolidados');
+            setProyectosConsolidados(response.data || []);
+        } catch (error) {
+            console.error('Error al obtener proyectos consolidados:', error);
+            message.error('Error al obtener proyectos consolidados');
+        } finally {
+            setCargandoConsolidados(false);
+        }
+    };
+
+    // Llamar cuando se seleccione la tabla de ejecución
+    useEffect(() => {
+        if (tablaSeleccionada === 'cuipo_plantilla_distrito_2025_vf') {
+            obtenerProyectosConsolidados();
+        } else {
+            setProyectosConsolidados([]); // limpiar si selecciona otra tabla
+        }
+    }, [tablaSeleccionada]);
 
     // LÓGICA CLAVE: handleCellChange actualizado para CPC y Producto MGA
     const handleCellChange = useCallback(async (recordId, key, value) => {
@@ -548,6 +573,109 @@ const EjecucionPresupuestal = () => {
                         showTotal: (total) => `Total ${total} registros`,
                     }}
                 />
+
+                {/* --- NUEVA TABLA: Proyectos Consolidados --- */}
+                {tablaSeleccionada === 'cuipo_plantilla_distrito_2025_vf' && (
+                    <Card
+                        title={<Title level={4} style={{ margin: 0 }}>Total de Ejecución por Proyectos Consolidados</Title>}
+                        style={{
+                            marginTop: '20px',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
+                        }}
+                    >
+                        <Table
+                            columns={[
+                                { title: 'Centro Gestor', dataIndex: 'centro_gestor', key: 'centro_gestor' },
+                                { title: 'Secretaría', dataIndex: 'secretaria', key: 'secretaria' },
+                                { title: 'Proyecto', dataIndex: 'proyecto', key: 'proyecto' },
+                                { title: 'Nombre Proyecto', dataIndex: 'nombre_proyecto', key: 'nombre_proyecto' },
+                                { 
+                                    title: 'Total Ppto Inicial', 
+                                    dataIndex: 'total_ppto_inicial', 
+                                    key: 'total_ppto_inicial',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Reducciones', 
+                                    dataIndex: 'total_reducciones', 
+                                    key: 'total_reducciones',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Adiciones', 
+                                    dataIndex: 'total_adiciones', 
+                                    key: 'total_adiciones',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Créditos', 
+                                    dataIndex: 'total_creditos', 
+                                    key: 'total_creditos',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Contracréditos', 
+                                    dataIndex: 'total_contracreditos', 
+                                    key: 'total_contracreditos',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Ppto Actual', 
+                                    dataIndex: 'total_ppto_actual', 
+                                    key: 'total_ppto_actual',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Disponibilidad', 
+                                    dataIndex: 'total_disponibilidad', 
+                                    key: 'total_disponibilidad',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Compromiso', 
+                                    dataIndex: 'total_compromiso', 
+                                    key: 'total_compromiso',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Factura', 
+                                    dataIndex: 'total_factura', 
+                                    key: 'total_factura',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Pagos', 
+                                    dataIndex: 'total_pagos', 
+                                    key: 'total_pagos',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Disponible Neto', 
+                                    dataIndex: 'total_disponible_neto', 
+                                    key: 'total_disponible_neto',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                                { 
+                                    title: 'Total Ejecución', 
+                                    dataIndex: 'total_ejecucion', 
+                                    key: 'total_ejecucion',
+                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+                                },
+                            ]}
+                            dataSource={proyectosConsolidados}
+                            loading={cargandoConsolidados}
+                            bordered
+                            size="small"
+                            rowKey={(record) => `${record.centro_gestor}-${record.proyecto}`}
+                            pagination={{
+                                showSizeChanger: true,
+                                pageSizeOptions: ['10', '20', '50', '100'],
+                                showTotal: (total) => `Total ${total} proyectos consolidados`,
+                            }}
+                        />
+                    </Card>
+                )}
             </Space>
         </Card>
     );
