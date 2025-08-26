@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Card, Select, Spin, Typography, message, Row, Col, Modal } from 'antd';
+import { Card, Select, Spin, Tag, Typography, message, Row, Col, Modal, Descriptions } from 'antd';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import { DatabaseOutlined } from '@ant-design/icons';
@@ -42,7 +42,7 @@ export default function PresupuestoGrafica() {
     const [selectedProyectoFilter, setSelectedProyectoFilter] = useState(null);
     const [loadingDetalleProyecto, setLoadingDetalleProyecto] = useState(false);
 
-    // === ESTADOS PARA EL MODAL (el modal de tu gráfica) ===
+    // === ESTADOS PARA EL MODAL (el modal de la gráfica 2) ===
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [modalData, setModalData] = useState({});
     const [loadingModalData, setLoadingModalData] = useState(false);
@@ -153,13 +153,26 @@ export default function PresupuestoGrafica() {
         if (!Array.isArray(allProjectsForSelectedSecretaria) || allProjectsForSelectedSecretaria.length === 0) {
             return [];
         }
-        return allProjectsForSelectedSecretaria
-            .filter(proyecto => proyecto && proyecto.codigo && proyecto.nombre)
-            .map((proyecto, index) => ({
-                value: `${proyecto.codigo}-${proyecto.fuente}-${index}`,
-                label: `${proyecto.codigo} - ${proyecto.nombre} (${proyecto.fuente})`
+
+        // Usamos un Map para quedarnos solo con proyectos únicos por "codigo"
+        const uniqueProjectsMap = new Map();
+
+        allProjectsForSelectedSecretaria.forEach(proyecto => {
+            if (proyecto && proyecto.codigo && proyecto.nombre) {
+                // si ya existe un proyecto con este código, no lo sobrescribimos
+                if (!uniqueProjectsMap.has(proyecto.codigo)) {
+                    uniqueProjectsMap.set(proyecto.codigo, proyecto);
+                }
+            }
+        });
+
+        // Convertimos el Map en un array de opciones
+        return Array.from(uniqueProjectsMap.values())
+            .map((proyecto) => ({
+                value: proyecto.codigo,  // Solo el código
+                label: `${proyecto.codigo} - ${proyecto.nombre}` // Sin la fuente
             }))
-            .sort((a, b) => a.value.localeCompare(b.value));
+            .sort((a, b) => a.label.localeCompare(b.label));
     }, [allProjectsForSelectedSecretaria]);
 
     // --- Cargar detalles para la gráfica de "Ejecución Financiera" (GRÁFICA 2) ---
@@ -241,9 +254,9 @@ export default function PresupuestoGrafica() {
         const aggregatedData = {};
         proyectosPorSecretariaData.forEach(item => {
             const key = item.centro_gestor && item.dependencia_nombre_completo
-                ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
-                : item.secretaria || 'Sin Secretaría Asociada';
-            
+            ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
+            : item.secretaria || 'Sin Secretaría';
+        
             if (!aggregatedData[key]) {
                 aggregatedData[key] = {
                     secretaria: item.secretaria,
@@ -264,7 +277,7 @@ export default function PresupuestoGrafica() {
                 const itemKey = item.centro_gestor && item.dependencia_nombre_completo
                     ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
                     : item.secretaria;
-                return itemKey === selectedSecretariaFilter;
+                return itemKey === selectedSecretariaFilter; // ✅ Filtra por clave COMPLETA
             });
         }
         // Si no hay filtro seleccionado y es un usuario normal con dependencia, filtrar por su dependencia
@@ -283,38 +296,45 @@ export default function PresupuestoGrafica() {
     }, [proyectosPorSecretariaData, selectedSecretariaFilter, user, isAdmin, isJuanLaver]);
 
     const secretariasOptionsForSelect = useMemo(() => {
-        // Si no hay datos, retornar array vacío
         if (!proyectosPorSecretariaData || proyectosPorSecretariaData.length === 0) {
             return [];
         }
 
-        // Obtener todas las opciones únicas disponibles
-        const uniqueOptions = new Set();
+        // Crear opciones con valor completo y label (nombre)
+        const optionsMap = new Map();
+
         proyectosPorSecretariaData.forEach(d => {
-            // Priorizar la combinación de centro_gestor y dependencia_nombre_completo
-            if (d.centro_gestor && d.dependencia_nombre_completo) {
-                uniqueOptions.add(`${d.centro_gestor} - ${d.dependencia_nombre_completo}`);
-            } else if (d.secretaria) {
-                uniqueOptions.add(d.secretaria);
+            // Crear la clave completa (como estaba antes)
+            const fullKey = d.centro_gestor && d.dependencia_nombre_completo
+                ? `${d.centro_gestor} - ${d.dependencia_nombre_completo}`
+                : d.secretaria || 'Sin Secretaría';
+
+            // Usar solo el nombre para mostrar
+            const displayName = d.secretaria || d.dependencia_nombre_completo || 'Sin Nombre';
+
+            // Agregar al Map para evitar duplicados
+            if (!optionsMap.has(fullKey)) {
+                optionsMap.set(fullKey, {
+                    value: fullKey,    // ✅ Valor completo para filtrar
+                    label: displayName // ✅ Solo nombre para mostrar
+                });
             }
         });
 
-        const sortedOptions = Array.from(uniqueOptions).sort((a, b) => a.localeCompare(b));
+        const sortedOptions = Array.from(optionsMap.values())
+            .sort((a, b) => a.label.localeCompare(b.label));
 
-        // Para usuarios admin o juanlaver, mostrar todas las opciones
         if (isAdmin() || isJuanLaver()) {
             return sortedOptions;
         }
 
-        // Para usuarios normales con dependencia, mostrar solo su dependencia
         if (user?.dependencyName) {
-            return sortedOptions.filter(option => 
-                option === user.dependencyName || 
-                option.includes(user.dependencyName)
+            return sortedOptions.filter(option =>
+                option.value === user.dependencyName ||
+                option.value.includes(user.dependencyName)
             );
         }
 
-        // Si no hay dependencia asignada, mostrar todas las opciones
         return sortedOptions;
     }, [proyectosPorSecretariaData, user, isAdmin, isJuanLaver]);
 
@@ -328,7 +348,7 @@ export default function PresupuestoGrafica() {
         setSelectedProyectoFilter(value);
     }, []);
 
-    // --- Función para mostrar el Modal con los datos del proyecto (TU MODAL EXISTENTE) ---
+    // --- Función para mostrar el Modal con los datos del proyecto ---
     const showModal = useCallback(async (category) => {
         if (!selectedProyectoFilter || !selectedSecretariaFilter) return;
 
@@ -410,7 +430,7 @@ export default function PresupuestoGrafica() {
         setModalData({});
     };
 
-    // --- Mapeo de nombres de campos para el modal (TU MODAL EXISTENTE) ---
+    // --- Mapeo de nombres de campos para el modal ---
     const modalFieldTitles = {
         "fuente": "Fuente",
         "secretaria": "Secretaría",
@@ -525,7 +545,7 @@ export default function PresupuestoGrafica() {
     // --- Configuración gráfica 2: Ejecución Financiera ---
     const ejecucionOptions = {
         chart: {
-            type: 'column', // Puedes cambiar a 'bar' si prefieres barras horizontales
+            type: 'column',
             height: 500,
             marginTop: 50
         },
@@ -632,7 +652,7 @@ export default function PresupuestoGrafica() {
 
     return (
         <div style={{ padding: '20px', minHeight: '100vh' }}>
-            <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+            <div style={{ maxWidth: '1600px', margin: '0 auto' }}>
                 <div style={{ marginBottom: '20px' }}>
                     <div style={{
                         display: 'flex',
@@ -673,12 +693,25 @@ export default function PresupuestoGrafica() {
                         <Col xs={24} md={12}>
                             <Card
                                 styles={{ body: { padding: '16px' } }}
-                                style={{ height: '100%', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}
-                            >
+                                style={{
+                                    minHeight: '550px', // mismo alto
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                                }}
+                                >
                                 <div style={{ marginBottom: '16px' }}>
-                                    <Text strong style={{ display: 'block', marginBottom: '8px', color: "#093fb4", fontSize: "16px" }}>Filtrar por Secretaría:</Text>
+                                    <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: '8px',
+                                        color: '#093fb4',
+                                        fontSize: '16px'
+                                    }}
+                                    >
+                                    Filtrar por Secretaría:
+                                    </Text>
                                     <Select
-                                        allowClear={!user?.dependencyName}
+                                        allowClear
                                         showSearch
                                         placeholder="Todas las Secretarías"
                                         style={{ width: '100%' }}
@@ -689,27 +722,45 @@ export default function PresupuestoGrafica() {
                                             (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                                         }
                                     >
-                                        {(!isAdmin() && !isJuanLaver() && user?.dependencyName)
-                                            ? <Select.Option key={user.dependencyName} value={user.dependencyName}>{user.dependencyName}</Select.Option>
-                                            : secretariasOptionsForSelect.map(optionText => (
-                                                <Select.Option key={optionText} value={optionText}>{optionText}</Select.Option>
-                                            ))}
+                                        {(!isAdmin() && !isJuanLaver() && user?.dependencyName) ? (
+                                            <Select.Option key={user.dependencyName} value={user.dependencyName}>
+                                                {/* Mostrar solo el nombre de la dependencia del usuario */}
+                                                {user.dependencyName.split(' - ').pop() || user.dependencyName}
+                                            </Select.Option>
+                                        ) : (
+                                            secretariasOptionsForSelect.map(option => (
+                                                <Select.Option key={option.value} value={option.value}>
+                                                    {/* ✅ option es un objeto, usar option.label */}
+                                                    {option.label.split(' - ').pop() || option.label}
+                                                </Select.Option>
+                                            ))
+                                        )}
                                     </Select>
                                 </div>
-                                <HighchartsReact
-                                    highcharts={Highcharts}
-                                    options={proyectosPorSecretariaOptions}
-                                />
+                                <HighchartsReact highcharts={Highcharts} options={proyectosPorSecretariaOptions} />
                             </Card>
                         </Col>
 
                         <Col xs={24} md={12}>
                             <Card
                                 styles={{ body: { padding: '16px' } }}
-                                style={{ height: '100%', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}
-                            >
+                                style={{
+                                    minHeight: '550px', // mismo alto
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                                }}
+                                >
                                 <div style={{ marginBottom: '16px' }}>
-                                    <Text strong style={{ display: 'block', marginBottom: '8px', color: "#093fb4", fontSize: "16px" }}>Filtrar por Proyecto:</Text>
+                                    <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: '8px',
+                                        color: '#093fb4',
+                                        fontSize: '16px'
+                                    }}
+                                    >
+                                    Filtrar por Proyecto:
+                                    </Text>
                                     <Select
                                         allowClear
                                         showSearch
@@ -725,10 +776,7 @@ export default function PresupuestoGrafica() {
                                         loading={loadingProyectos}
                                     />
                                 </div>
-                                <HighchartsReact
-                                    highcharts={Highcharts}
-                                    options={ejecucionOptions}
-                                />
+                                <HighchartsReact highcharts={Highcharts} options={ejecucionOptions} />
                             </Card>
                         </Col>
                     </Row>
@@ -737,30 +785,118 @@ export default function PresupuestoGrafica() {
 
             {/* Modal para mostrar el detalle del presupuesto */}
             <Modal
-                title={`Detalle de Presupuesto para el Proyecto: ${selectedProyectoFilter}`}
+                title={
+                    <div style={{ textAlign: "center" }}>
+                    <Text strong style={{ fontSize: "20px" }}>📊 Detalle del Presupuesto</Text>
+                    <div style={{ fontSize: "14px", color: "#888" }}>
+                        Proyecto seleccionado: <b>{selectedProyectoFilter}</b>
+                    </div>
+                    </div>
+                }
                 open={isModalVisible}
                 onCancel={handleCancelModal}
                 footer={null}
-                width={600}
+                width="90%" // 🔥 ocupa casi toda la pantalla de ancho
                 centered
-            >
+                styles={{
+                    body: {
+                    background: "#f9fafc",
+                    borderRadius: "12px",
+                    padding: "32px",
+                    maxHeight: "75vh", // 🔥 controla altura
+                    overflowY: "auto", // 🔥 scroll si el contenido es grande
+                    },
+                }}
+                >
                 {loadingModalData ? (
-                    <Spin style={{ display: 'block', margin: '50px auto' }} />
+                    <Spin style={{ display: "block", margin: "60px auto" }} size="large" />
                 ) : Object.keys(modalData).length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {Object.keys(modalData).map((key) => (
-                            <div key={key}>
-                                <Text strong>{modalFieldTitles[key] || key}: </Text>
-                                <Text>{formatModalValue(key, modalData[key])}</Text>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <Text>No hay datos disponibles para este proyecto.</Text>
-                )}
-            </Modal>
+                    <Descriptions
+                        bordered
+                        column={2}
+                        size="middle"
+                        styles={{
+                            fontWeight: "600",
+                            background: "#f0f2f5",
+                            width: "25%",   // ancho más grande para la columna gris
+                            fontSize: "15px",
+                        }}
+                        contentStyle={{
+                            background: "#fff",
+                            fontSize: "15px",
+                            padding: "12px 16px",
+                            width: "35%",   // controlas el ancho de la columna blanca
+                        }}
+                    >
+                    {Object.keys(modalData).map((key) => {
+                        const value = modalData[key];
+                        const label = modalFieldTitles[key] || key;
 
-            {/* ¡Aquí es donde agregas el componente ValidationSummary! */}
+                        // Ejecución con porcentaje y colores dinámicos
+                        if (key.toLowerCase().includes("ejecucion")) {
+                        const porcentaje = parseFloat(value) || 0;
+                        let color = "red";
+                        if (porcentaje > 80) color = "green";
+                        else if (porcentaje >= 50) color = "orange";
+
+                        return (
+                            <Descriptions.Item key={key} label={`✅ ${label}`}>
+                            <Tag color={color} style={{ fontSize: "14px", padding: "4px 10px" }}>
+                                {porcentaje.toFixed(2)}%
+                            </Tag>
+                            </Descriptions.Item>
+                        );
+                        }
+
+                        // Presupuesto
+                        if (key.toLowerCase().includes("presupuesto")) {
+                        return (
+                            <Descriptions.Item key={key} label={`💰 ${label}`}>
+                            <Text strong>{Number(value).toLocaleString("es-CO")}</Text>
+                            </Descriptions.Item>
+                        );
+                        }
+
+                        // Adiciones
+                        if (key.toLowerCase().includes("adicion")) {
+                        return (
+                            <Descriptions.Item key={key} label={`📈 ${label}`}>
+                            <Text type="success">{Number(value).toLocaleString("es-CO")}</Text>
+                            </Descriptions.Item>
+                        );
+                        }
+
+                        // Reducciones
+                        if (key.toLowerCase().includes("reduccion")) {
+                        return (
+                            <Descriptions.Item key={key} label={`📉 ${label}`}>
+                            <Text type="danger">{Number(value).toLocaleString("es-CO")}</Text>
+                            </Descriptions.Item>
+                        );
+                        }
+
+                        // Secretaría
+                        if (key.toLowerCase().includes("secretaria")) {
+                        return (
+                            <Descriptions.Item key={key} label={`🏢 ${label}`}>
+                            <Tag color="blue">{value}</Tag>
+                            </Descriptions.Item>
+                        );
+                        }
+
+                        // Default
+                        return (
+                        <Descriptions.Item key={key} label={label}>
+                            {value}
+                        </Descriptions.Item>
+                        );
+                    })}
+                    </Descriptions>
+                    ) : (
+                        <Text>No hay datos disponibles para este proyecto.</Text>
+                    )}
+                </Modal>
+            {/* ¡Aquí es donde se agregamos el componente ValidationSummary! */}
             <ValidationSummary />
         </div>
     );

@@ -577,7 +577,7 @@ const EjecucionPresupuestal = () => {
                 {/* --- NUEVA TABLA: Proyectos Consolidados --- */}
                 {tablaSeleccionada === 'cuipo_plantilla_distrito_2025_vf' && (
                     <Card
-                        title={<Title level={4} style={{ margin: 0 }}>Total de Ejecución por Proyectos Consolidados</Title>}
+                        title={<Title level={4} style={{ margin: 5, color: '#0590ecff' }}>Total de Ejecución por Proyectos Consolidados</Title>}
                         style={{
                             marginTop: '20px',
                             borderRadius: '8px',
