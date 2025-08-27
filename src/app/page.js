@@ -345,6 +345,7 @@ export default function PresupuestoGrafica() {
     }, []);
 
     const handleProyectoChange = useCallback((value) => {
+        console.log("Proyecto seleccionado:", value);
         setSelectedProyectoFilter(value);
     }, []);
 

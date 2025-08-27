@@ -31,8 +31,19 @@ const calcularValidadorCpc = (codigoYNombreCpc, pospreCuipo) => {
     return "ERROR CPC";
 };
 
-const calcularCpcCuipo = (codigoYNombreCpc) => {
-    return codigoYNombreCpc ? String(codigoYNombreCpc).substring(0, 7) : null;
+//const calcularCpcCuipo = (codigoYNombreCpc) => {
+//    return codigoYNombreCpc ? String(codigoYNombreCpc).substring(0, 7) : null;
+//};
+export const calcularCpcCuipo = (codigoYNombreCpc) => {
+  if (!codigoYNombreCpc || String(codigoYNombreCpc).toUpperCase().includes('NO APLICA')) return "";
+
+  // Toma lo anterior al guion (si hay), limpia espacios
+  const beforeHyphen = String(codigoYNombreCpc).split('-')[0].trim();
+
+  // Deja solo dígitos (por si viniera "811125 " o "811125 / X")
+  const digitsOnly = beforeHyphen.replace(/\D/g, '');
+
+  return digitsOnly;
 };
 
 // NUEVAS Funciones de Cálculo para Producto MGA
@@ -76,6 +87,9 @@ const EjecucionPresupuestal = () => {
     const [progreso, setProgreso] = useState(0);
     const [proyectosConsolidados, setProyectosConsolidados] = useState([]);
     const [cargandoConsolidados, setCargandoConsolidados] = useState(false);
+     // 🔹 NUEVOS estados para filtros dependientes
+    const [secretariaSeleccionada, setSecretariaSeleccionada] = useState(null);
+    const [proyectoSeleccionado, setProyectoSeleccionado] = useState(null);
 
     const camposPresupuestalesResaltar = [
         'ppto_inicial', 'reducciones', 'adiciones', 'creditos', 'contracreditos',
@@ -150,6 +164,23 @@ const EjecucionPresupuestal = () => {
         }
     }, [tablaSeleccionada]);
 
+     // 🔹 Filtros dependientes
+    const secretarias = [...new Set(datosTabla.map((item) => item.secretaria))];
+    const proyectos = secretariaSeleccionada
+        ? [...new Set(
+            datosTabla
+            .filter((item) => item.secretaria === secretariaSeleccionada)
+            .map((item) => item.proyecto)
+        )]
+        : [];
+
+    const datosFiltrados = datosTabla.filter((item) => {
+        return (
+        (!secretariaSeleccionada || item.secretaria === secretariaSeleccionada) &&
+        (!proyectoSeleccionado || item.proyecto === proyectoSeleccionado)
+        );
+    });
+
     // LÓGICA CLAVE: handleCellChange actualizado para CPC y Producto MGA
     const handleCellChange = useCallback(async (recordId, key, value) => {
         let updatedRow = null;
@@ -163,8 +194,12 @@ const EjecucionPresupuestal = () => {
                     // Lógica para CPC (existente)
                     if (key === 'codigo_y_nombre_del_cpc') {
                         const newCpcCuipo = calcularCpcCuipo(value);
-                        const newValidadorCpc = calcularValidadorCpc(value, row.pospre_cuipo);
-                        updatedRow.cpc_cuipo = newCpcCuipo;
+
+                        // Usamos updatedRow en vez de row
+                        const newValidadorCpc = calcularValidadorCpc(value, updatedRow.pospre_cuipo);
+
+                        // Asignar valores corregidos
+                        updatedRow.cpc_cuipo = newCpcCuipo ? newCpcCuipo : 0;  // si no hay CPC, ponemos 0
                         updatedRow.validador_cpc = newValidadorCpc;
                     }
                     // NUEVA Lógica para Producto MGA
@@ -193,8 +228,10 @@ const EjecucionPresupuestal = () => {
 
                 // Si se cambió 'codigo_y_nombre_del_cpc', incluimos los recalculados
                 if (key === 'codigo_y_nombre_del_cpc') {
-                    fieldsToUpdate.cpc_cuipo = updatedRow.cpc_cuipo;
-                    fieldsToUpdate.validador_cpc = updatedRow.validador_cpc;
+                    const newCpcCuipo = calcularCpcCuipo(value);
+                    const newValidadorCpc = calcularValidadorCpc(value, updatedRow.pospre_cuipo);
+                    updatedRow.cpc_cuipo = newCpcCuipo;
+                    updatedRow.validador_cpc = newValidadorCpc;
                 }
                 // Si se cambió 'codigo_y_nombre_del_producto_mga', incluimos los recalculados
                 else if (key === 'codigo_y_nombre_del_producto_mga') {
@@ -477,208 +514,260 @@ const EjecucionPresupuestal = () => {
             title={<Title level={3} style={{ margin: 0 }}>EJECUCIÓN PRESUPUESTAL</Title>}
             variant="bordered"
             style={{
-                margin: '20px',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            margin: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
             }}
         >
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Space size="large" align="center" wrap>
-                    <Select
-                        suppressHydrationWarning
-                        showSearch
-                        style={{ width: 350 }}
-                        placeholder="Seleccione una tabla"
-                        optionFilterProp="children"
-                        onChange={handleCambioTabla}
-                        value={tablaSeleccionada}
-                        loading={cargando}
-                        filterOption={(input, option) =>
-                            option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
-                        }
-                    >
-                        {Array.isArray(tablasDisponibles) && tablasDisponibles.map(tabla => (
-                            <Option key={tabla} value={tabla}>
-                                {tabla}
-                            </Option>
-                        ))}
-                    </Select>
+            <Space size="large" align="center" wrap>
+                <Select
+                suppressHydrationWarning
+                showSearch
+                style={{ width: 350 }}
+                placeholder="Seleccione una tabla"
+                optionFilterProp="children"
+                onChange={handleCambioTabla}
+                value={tablaSeleccionada}
+                loading={cargando}
+                filterOption={(input, option) =>
+                    option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }
+                >
+                {Array.isArray(tablasDisponibles) && tablasDisponibles.map(tabla => (
+                    <Option key={tabla} value={tabla}>
+                    {tabla}
+                    </Option>
+                ))}
+                </Select>
 
-                    <Button
-                        type="primary"
-                        icon={<CopyOutlined />}
-                        loading={copiandoDatos}
-                        onClick={handleTraerDatosYCopiar}
-                        disabled={cargando || ejecutando || copiandoDatos}
-                    >
-                        Traer datos (Copiar Base a Plantilla)
-                    </Button>
+                <Button
+                type="primary"
+                icon={<CopyOutlined />}
+                loading={copiandoDatos}
+                onClick={handleTraerDatosYCopiar}
+                disabled={cargando || ejecutando || copiandoDatos}
+                >
+                Traer datos (Copiar Base a Plantilla)
+                </Button>
 
-                    <Button
-                        type="primary"
-                        icon={<DownloadOutlined />}
-                        loading={ejecutando}
-                        onClick={ejecutarPresupuesto}
-                        disabled={tablaSeleccionada !== 'cuipo_plantilla_distrito_2025_vf' || ejecutando || copiandoDatos || cargando || datosTabla.length === 0}
-                        style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                    >
-                        Ejecutar Presupuesto
-                    </Button>
+                <Button
+                type="primary"
+                icon={<DownloadOutlined />}
+                loading={ejecutando}
+                onClick={ejecutarPresupuesto}
+                disabled={
+                    tablaSeleccionada !== 'cuipo_plantilla_distrito_2025_vf' ||
+                    ejecutando || copiandoDatos || cargando || datosTabla.length === 0
+                }
+                style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                >
+                Ejecutar Presupuesto
+                </Button>
 
-                    <Button
-                        type="default"
-                        icon={<DownloadOutlined />}
-                        disabled={datosTabla.length === 0 || ejecutando || copiandoDatos || cargando}
-                    >
-                        Exportar a Excel
-                    </Button>
+                <Button
+                type="default"
+                icon={<DownloadOutlined />}
+                disabled={datosTabla.length === 0 || ejecutando || copiandoDatos || cargando}
+                >
+                Exportar a Excel
+                </Button>
 
-                    <Button
-                        danger
-                        icon={<ClearOutlined />}
-                        onClick={limpiarDatos}
-                        disabled={!tablaSeleccionada || ejecutando || copiandoDatos || cargando}
-                    >
-                        Limpiar
-                    </Button>
-                </Space>
+                <Button
+                danger
+                icon={<ClearOutlined />}
+                onClick={limpiarDatos}
+                disabled={!tablaSeleccionada || ejecutando || copiandoDatos || cargando}
+                >
+                Limpiar
+                </Button>
+            </Space>
 
-                {(ejecutando || copiandoDatos) && (
-                    <Progress
-                        percent={ejecutando ? progreso : undefined}
-                        status="active"
-                        strokeColor={{
-                            '0%': '#108ee9',
-                            '100%': '#87d068',
-                        }}
-                        format={ejecutando ? (percent) => `${percent}%` : () => 'Copiando datos base a plantilla...'}
-                    />
-                )}
+            {(ejecutando || copiandoDatos) && (
+                <Progress
+                percent={ejecutando ? progreso : undefined}
+                status="active"
+                strokeColor={{
+                    '0%': '#108ee9',
+                    '100%': '#87d068',
+                }}
+                format={ejecutando ? (percent) => `${percent}%` : () => 'Copiando datos base a plantilla...'}
+                />
+            )}
 
+            {/* 🔹 Filtros dependientes */}
+            <Space size="large" wrap>
+                <Select
+                placeholder="Filtrar por Secretaría"
+                style={{ width: 250 }}
+                allowClear
+                showSearch
+                value={secretariaSeleccionada}
+                onChange={(value) => {
+                    setSecretariaSeleccionada(value);
+                    setProyectoSeleccionado(null); // reset proyecto
+                }}
+                filterOption={(input, option) =>
+                    option.children.toLowerCase().includes(input.toLowerCase())
+                }
+                >
+                {secretarias.map((sec) => (
+                    <Option key={sec} value={sec}>
+                    {sec}
+                    </Option>
+                ))}
+                </Select>
+
+                <Select
+                placeholder="Filtrar por Proyecto"
+                style={{ width: 300 }}
+                allowClear
+                showSearch
+                disabled={!secretariaSeleccionada}
+                value={proyectoSeleccionado}
+                onChange={(value) => setProyectoSeleccionado(value)}
+                filterOption={(input, option) =>
+                    option.children.toLowerCase().includes(input.toLowerCase())
+                }
+                >
+                {proyectos.map((proy) => (
+                    <Option key={proy} value={proy}>
+                    {proy}
+                    </Option>
+                ))}
+                </Select>
+            </Space>
+
+            {/* Tabla principal con filtros aplicados */}
+            <Table
+                columns={columnas}
+                dataSource={datosFiltrados}
+                loading={cargando || ejecutando || copiandoDatos}
+                bordered
+                size="middle"
+                scroll={{ x: 'max-content' }}
+                rowKey={(record) => record.id || JSON.stringify(record)}
+                style={{
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}
+                pagination={{
+                showSizeChanger: true,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showTotal: (total) => `Total ${total} registros`,
+                }}
+            />
+
+            {/* --- NUEVA TABLA: Proyectos Consolidados --- */}
+            {tablaSeleccionada === 'cuipo_plantilla_distrito_2025_vf' && (
+                <Card
+                title={
+                    <Title level={4} style={{ margin: 5, color: '#0590ecff' }}>
+                    Total de Ejecución por Proyectos Consolidados
+                    </Title>
+                }
+                style={{
+                    marginTop: '20px',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
+                }}
+                >
                 <Table
-                    columns={columnas}
-                    dataSource={datosTabla}
-                    loading={cargando || ejecutando || copiandoDatos}
+                    columns={[
+                    { title: 'Centro Gestor', dataIndex: 'centro_gestor', key: 'centro_gestor' },
+                    { title: 'Secretaría', dataIndex: 'secretaria', key: 'secretaria' },
+                    { title: 'Proyecto', dataIndex: 'proyecto', key: 'proyecto' },
+                    { title: 'Nombre Proyecto', dataIndex: 'nombre_proyecto', key: 'nombre_proyecto' },
+                    {
+                        title: 'Total Ppto Inicial',
+                        dataIndex: 'total_ppto_inicial',
+                        key: 'total_ppto_inicial',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Reducciones',
+                        dataIndex: 'total_reducciones',
+                        key: 'total_reducciones',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Adiciones',
+                        dataIndex: 'total_adiciones',
+                        key: 'total_adiciones',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Créditos',
+                        dataIndex: 'total_creditos',
+                        key: 'total_creditos',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Contracréditos',
+                        dataIndex: 'total_contracreditos',
+                        key: 'total_contracreditos',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Ppto Actual',
+                        dataIndex: 'total_ppto_actual',
+                        key: 'total_ppto_actual',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Disponibilidad',
+                        dataIndex: 'total_disponibilidad',
+                        key: 'total_disponibilidad',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Compromiso',
+                        dataIndex: 'total_compromiso',
+                        key: 'total_compromiso',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Factura',
+                        dataIndex: 'total_factura',
+                        key: 'total_factura',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Pagos',
+                        dataIndex: 'total_pagos',
+                        key: 'total_pagos',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Disponible Neto',
+                        dataIndex: 'total_disponible_neto',
+                        key: 'total_disponible_neto',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    {
+                        title: 'Total Ejecución',
+                        dataIndex: 'total_ejecucion',
+                        key: 'total_ejecucion',
+                        render: (value) => Number(value).toLocaleString('es-CO')
+                    },
+                    ]}
+                    dataSource={proyectosConsolidados}
+                    loading={cargandoConsolidados}
                     bordered
-                    size="middle"
-                    scroll={{ x: 'max-content' }}
-                    rowKey={(record) => record.id || JSON.stringify(record)}
-                    style={{
-                        borderRadius: '8px',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                    }}
+                    size="small"
+                    rowKey={(record) => `${record.centro_gestor}-${record.proyecto}`}
                     pagination={{
-                        showSizeChanger: true,
-                        pageSizeOptions: ['10', '20', '50', '100'],
-                        showTotal: (total) => `Total ${total} registros`,
+                    showSizeChanger: true,
+                    pageSizeOptions: ['10', '20', '50', '100'],
+                    showTotal: (total) => `Total ${total} proyectos consolidados`,
                     }}
                 />
-
-                {/* --- NUEVA TABLA: Proyectos Consolidados --- */}
-                {tablaSeleccionada === 'cuipo_plantilla_distrito_2025_vf' && (
-                    <Card
-                        title={<Title level={4} style={{ margin: 5, color: '#0590ecff' }}>Total de Ejecución por Proyectos Consolidados</Title>}
-                        style={{
-                            marginTop: '20px',
-                            borderRadius: '8px',
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
-                        }}
-                    >
-                        <Table
-                            columns={[
-                                { title: 'Centro Gestor', dataIndex: 'centro_gestor', key: 'centro_gestor' },
-                                { title: 'Secretaría', dataIndex: 'secretaria', key: 'secretaria' },
-                                { title: 'Proyecto', dataIndex: 'proyecto', key: 'proyecto' },
-                                { title: 'Nombre Proyecto', dataIndex: 'nombre_proyecto', key: 'nombre_proyecto' },
-                                { 
-                                    title: 'Total Ppto Inicial', 
-                                    dataIndex: 'total_ppto_inicial', 
-                                    key: 'total_ppto_inicial',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Reducciones', 
-                                    dataIndex: 'total_reducciones', 
-                                    key: 'total_reducciones',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Adiciones', 
-                                    dataIndex: 'total_adiciones', 
-                                    key: 'total_adiciones',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Créditos', 
-                                    dataIndex: 'total_creditos', 
-                                    key: 'total_creditos',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Contracréditos', 
-                                    dataIndex: 'total_contracreditos', 
-                                    key: 'total_contracreditos',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Ppto Actual', 
-                                    dataIndex: 'total_ppto_actual', 
-                                    key: 'total_ppto_actual',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Disponibilidad', 
-                                    dataIndex: 'total_disponibilidad', 
-                                    key: 'total_disponibilidad',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Compromiso', 
-                                    dataIndex: 'total_compromiso', 
-                                    key: 'total_compromiso',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Factura', 
-                                    dataIndex: 'total_factura', 
-                                    key: 'total_factura',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Pagos', 
-                                    dataIndex: 'total_pagos', 
-                                    key: 'total_pagos',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Disponible Neto', 
-                                    dataIndex: 'total_disponible_neto', 
-                                    key: 'total_disponible_neto',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                                { 
-                                    title: 'Total Ejecución', 
-                                    dataIndex: 'total_ejecucion', 
-                                    key: 'total_ejecucion',
-                                    render: (value) => Number(value).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-                                },
-                            ]}
-                            dataSource={proyectosConsolidados}
-                            loading={cargandoConsolidados}
-                            bordered
-                            size="small"
-                            rowKey={(record) => `${record.centro_gestor}-${record.proyecto}`}
-                            pagination={{
-                                showSizeChanger: true,
-                                pageSizeOptions: ['10', '20', '50', '100'],
-                                showTotal: (total) => `Total ${total} proyectos consolidados`,
-                            }}
-                        />
-                    </Card>
-                )}
+                </Card>
+            )}
             </Space>
         </Card>
     );
+
 };
 
 export default EjecucionPresupuestal;

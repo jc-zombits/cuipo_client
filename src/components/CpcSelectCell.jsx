@@ -1,107 +1,86 @@
 // components/CpcSelectCell.jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { Select, message } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Select } from 'antd';
 import axios from 'axios';
-
 const { Option } = Select;
 
-// Caching para las opciones de CPC (fuera del componente para que persista)
 const cpcOptionsCache = {};
 
 const CpcSelectCell = ({ value, recordId, tieneCpc, onValueChange }) => {
-    const [options, setOptions] = useState([]);
-    const [loadingOptions, setLoadingOptions] = useState(false);
+  const [options, setOptions] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
 
-    useEffect(() => {
-        const fetchCpcOptions = async () => {
-            if (tieneCpc) {
-                const parts = String(tieneCpc).split('.');
-                const lastPart = parts[parts.length - 1];
-                const lastDigit = lastPart ? lastPart.slice(-1) : null;
+  useEffect(() => {
+    const fetchCpcOptions = async () => {
+      if (tieneCpc) {
+        const parts = String(tieneCpc).split('.');
+        const lastPart = parts[parts.length - 1];
+        const lastDigit = lastPart ? lastPart.slice(-1) : null;
 
-                if (lastDigit && !isNaN(parseInt(lastDigit, 10))) { // Asegurarse de que es un número
-                    // Usar caché si las opciones ya fueron cargadas
-                    if (cpcOptionsCache[lastDigit]) {
-                        setOptions(cpcOptionsCache[lastDigit]);
-                        return;
-                    }
-
-                    setLoadingOptions(true);
-                    try {
-                        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/ejecucion/cpc-options/${lastDigit}`);
-                        if (response.data.success) {
-                            const fetchedOptions = response.data.data;
-                            setOptions(fetchedOptions);
-                            cpcOptionsCache[lastDigit] = fetchedOptions; // Guardar en caché
-                        } else {
-                            // No mostrar un message.error por cada celda, solo un console.error
-                            console.error(`Error al cargar opciones de CPC para dígito ${lastDigit}: ${response.data.message}`);
-                            setOptions([]);
-                        }
-                    } catch (error) {
-                        console.error(`Error de red o servidor al cargar opciones de CPC para dígito ${lastDigit}:`, error);
-                        // No mostrar un message.error por cada celda, solo un console.error
-                        setOptions([]);
-                    } finally {
-                        setLoadingOptions(false);
-                    }
-                } else {
-                    setOptions([]); // Si tiene_cpc no tiene un dígito final válido
-                }
+        if (lastDigit && !isNaN(parseInt(lastDigit, 10))) {
+          if (cpcOptionsCache[lastDigit]) {
+            setOptions(cpcOptionsCache[lastDigit]);
+            return;
+          }
+          setLoadingOptions(true);
+          try {
+            const { data } = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/ejecucion/cpc-options/${lastDigit}`);
+            if (data?.success) {
+              setOptions(data.data);
+              cpcOptionsCache[lastDigit] = data.data;
             } else {
-                setOptions([]); // Si tiene_cpc es nulo o vacío
+              console.error(`Error al cargar opciones de CPC para dígito ${lastDigit}:`, data?.message);
+              setOptions([]);
             }
-        };
-
-        fetchCpcOptions();
-    }, [tieneCpc]); // Se ejecuta cuando tieneCpc de la fila cambia
-
-    //const handleChange = (newValue) => {
-        //onValueChange(recordId, 'codigo_y_nombre_del_cpc', newValue);
-            //onValueChange(recordId, {
-            //codigo_y_nombre_del_cpc: newValue,
-            //cpc_cuipo: newCpcCuipo,
-            //validador_cpc: newValidadorCpc
-        //});
-    //};
-
-    const handleChange = (newValue) => {
-        // Encontrar la opción seleccionada para obtener el cpc_cuipo
-        const selectedOption = options.find(opt => opt.value === newValue);
-        
-        // ✅ Definir newCpcCuipo basado en la opción seleccionada
-        const newCpcCuipo = selectedOption?.cpc_codigo || null;
-        const newValidadorCpc = 'PENDIENTE'; // o lógica de validación
-        
-        onValueChange(recordId, 'codigo_y_nombre_del_cpc', newValue);
-        onValueChange(recordId, {
-            codigo_y_nombre_del_cpc: newValue,
-            cpc_cuipo: newCpcCuipo, // ✅ Ahora está definida
-            validador_cpc: newValidadorCpc
-        });
+          } catch (e) {
+            console.error(`Error de red/servidor al cargar opciones de CPC (${lastDigit}):`, e);
+            setOptions([]);
+          } finally {
+            setLoadingOptions(false);
+          }
+        } else {
+          setOptions([]);
+        }
+      } else {
+        setOptions([]);
+      }
     };
+    fetchCpcOptions();
+  }, [tieneCpc]);
 
-    return (
-        <Select
-            value={value} // El valor actual de la celda
-            onChange={handleChange}
-            loading={loadingOptions}
-            disabled={!tieneCpc || options.length === 0} // Deshabilitar si no hay tiene_cpc o no hay opciones
-            style={{ width: '100%' }}
-            showSearch // Permite buscar dentro del select
-            optionFilterProp="children"
-            filterOption={(input, option) =>
-                (option?.children || '').toLowerCase().includes(input.toLowerCase())
-            }
-        >
-            <Option value="">Seleccione...</Option>
-            {options.map(opt => (
-                <Option key={opt.value} value={opt.value}>
-                    {opt.label}
-                </Option>
-            ))}
-        </Select>
-    );
+  // 🔹 Cuando NO se requiere CPC, auto-sincroniza el valor con el padre
+  // (el padre calculará cpc_cuipo + validador)
+  useEffect(() => {
+    if (!tieneCpc) {
+      onValueChange(recordId, 'codigo_y_nombre_del_cpc', value || 'NO APLICA');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tieneCpc]);
+
+  const handleChange = (newValue) => {
+    // 👇 Solo UN llamado, con (recordId, key, value)
+    onValueChange(recordId, 'codigo_y_nombre_del_cpc', newValue);
+  };
+
+  return (
+    <Select
+      value={value}
+      onChange={handleChange}
+      loading={loadingOptions}
+      disabled={!tieneCpc || options.length === 0}
+      style={{ width: '100%' }}
+      showSearch
+      optionFilterProp="children"
+      filterOption={(input, option) => (option?.children || '').toLowerCase().includes(input.toLowerCase())}
+    >
+      <Option value="">Seleccione...</Option>
+      {options.map(opt => (
+        <Option key={opt.value} value={opt.value}>
+          {opt.label}
+        </Option>
+      ))}
+    </Select>
+  );
 };
 
 export default CpcSelectCell;
