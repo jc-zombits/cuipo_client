@@ -680,32 +680,32 @@ const EjecucionPresupuestal = () => {
                     { title: 'Nombre Proyecto', dataIndex: 'nombre_proyecto', key: 'nombre_proyecto' },
                     {
                         title: 'Total Ppto Inicial',
-                        dataIndex: 'total_ppto_inicial',
-                        key: 'total_ppto_inicial',
+                        dataIndex: 'ppto_inicial',
+                        key: 'ppto_inicial',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Reducciones',
-                        dataIndex: 'total_reducciones',
-                        key: 'total_reducciones',
+                        dataIndex: 'reducciones',
+                        key: 'reducciones',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Adiciones',
                         dataIndex: 'total_adiciones',
-                        key: 'total_adiciones',
+                        key: 'adiciones',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Créditos',
                         dataIndex: 'total_creditos',
-                        key: 'total_creditos',
+                        key: 'creditos',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Contracréditos',
-                        dataIndex: 'total_contracreditos',
-                        key: 'total_contracreditos',
+                        dataIndex: 'contracreditos',
+                        key: 'contracreditos',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
@@ -716,38 +716,38 @@ const EjecucionPresupuestal = () => {
                     },
                     {
                         title: 'Total Disponibilidad',
-                        dataIndex: 'total_disponibilidad',
-                        key: 'total_disponibilidad',
+                        dataIndex: 'disponibilidad',
+                        key: 'disponibilidad',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Compromiso',
-                        dataIndex: 'total_compromiso',
-                        key: 'total_compromiso',
+                        dataIndex: 'compromiso',
+                        key: 'compromiso',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Factura',
-                        dataIndex: 'total_factura',
-                        key: 'total_factura',
+                        dataIndex: 'factura',
+                        key: 'factura',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Pagos',
-                        dataIndex: 'total_pagos',
-                        key: 'total_pagos',
+                        dataIndex: 'pagos',
+                        key: 'pagos',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Disponible Neto',
-                        dataIndex: 'total_disponible_neto',
-                        key: 'total_disponible_neto',
+                        dataIndex: 'disponible_neto',
+                        key: 'disponible_neto',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Ejecución',
-                        dataIndex: 'total_ejecucion',
-                        key: 'total_ejecucion',
+                        dataIndex: 'ejecucion',
+                        key: 'ejecucion',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     ]}
