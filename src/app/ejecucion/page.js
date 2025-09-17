@@ -191,21 +191,19 @@ const EjecucionPresupuestal = () => {
                 if (row.id === recordId) {
                     updatedRow = { ...row, [key]: value };
 
-                    // Lógica para CPC (existente)
+                    // Lógica para CPC
                     if (key === 'codigo_y_nombre_del_cpc') {
                         const newCpcCuipo = calcularCpcCuipo(value);
-
-                        // Usamos updatedRow en vez de row
                         const newValidadorCpc = calcularValidadorCpc(value, updatedRow.pospre_cuipo);
 
-                        // Asignar valores corregidos
-                        updatedRow.cpc_cuipo = newCpcCuipo ? newCpcCuipo : 0;  // si no hay CPC, ponemos 0
+                        updatedRow.cpc_cuipo = newCpcCuipo ? newCpcCuipo : 0;
                         updatedRow.validador_cpc = newValidadorCpc;
                     }
-                    // NUEVA Lógica para Producto MGA
+                    // Lógica para Producto MGA
                     else if (key === 'codigo_y_nombre_del_producto_mga') {
                         const newProductoCuipo = calcularProductoCuipo(value);
                         const newValidadorProducto = calcularValidadorProducto(value, row.producto_ppal, row.sector_cuipo);
+
                         updatedRow.producto_cuipo = newProductoCuipo;
                         updatedRow.validador_del_producto = newValidadorProducto;
                     }
@@ -216,36 +214,41 @@ const EjecucionPresupuestal = () => {
             });
         });
 
-        // === PERSISTIR CAMBIOS EN LA BASE DE DATOS ===
-        // Usamos el 'updatedRow' que ya tiene los valores recalculados
+        // Persistir cambios en backend
         if (updatedRow) {
             try {
-                // Preparamos los campos a enviar
-                const fieldsToUpdate = {
-                    id: recordId,
-                    [key]: updatedRow[key] // El campo que el usuario cambió
-                };
+                const fieldsToUpdate = { id: recordId };
 
-                // Si se cambió 'codigo_y_nombre_del_cpc', incluimos los recalculados
+                // Si es CPC
                 if (key === 'codigo_y_nombre_del_cpc') {
-                    const newCpcCuipo = calcularCpcCuipo(value);
-                    const newValidadorCpc = calcularValidadorCpc(value, updatedRow.pospre_cuipo);
-                    updatedRow.cpc_cuipo = newCpcCuipo;
-                    updatedRow.validador_cpc = newValidadorCpc;
+                    fieldsToUpdate[key] = updatedRow[key];
+                    fieldsToUpdate.cpc_cuipo = updatedRow.cpc_cuipo;
+                    fieldsToUpdate.validador_cpc = updatedRow.validador_cpc;
                 }
-                // Si se cambió 'codigo_y_nombre_del_producto_mga', incluimos los recalculados
+                // Si es Producto MGA
                 else if (key === 'codigo_y_nombre_del_producto_mga') {
+                    fieldsToUpdate[key] = updatedRow[key];
                     fieldsToUpdate.producto_cuipo = updatedRow.producto_cuipo;
                     fieldsToUpdate.validador_del_producto = updatedRow.validador_del_producto;
                 }
+                // Si es Detalle Sectorial
+                else if (key === 'detalle_sectorial') {
+                    fieldsToUpdate.detalle_sectorial = updatedRow.detalle_sectorial;
+                    fieldsToUpdate.extrae_detalle_sectorial = updatedRow.extrae_detalle_sectorial;
+                    fieldsToUpdate.detalle_sectorial_prog_gasto = updatedRow.detalle_sectorial_prog_gasto;
+                }
+                // Otros campos editables simples
+                else {
+                    fieldsToUpdate[key] = updatedRow[key];
+                }
 
-                // Asume que tienes un endpoint para actualizar una celda o fila
+                console.log("Payload enviado:", fieldsToUpdate);
+
                 await api.post('/ejecucion/actualizar-fila', fieldsToUpdate);
                 message.success('Campo actualizado exitosamente en la base de datos.');
             } catch (error) {
                 console.error('Error al persistir el cambio en la base de datos:', error);
                 message.error(`Error al guardar el cambio: ${error.response?.data?.error || error.message}`);
-                // Opcional: Revertir el estado en el frontend si falla la DB
             }
         }
     }, []); // Dependencias vacías porque las funciones de cálculo son externas y estables
@@ -369,8 +372,88 @@ const EjecucionPresupuestal = () => {
                         columnDefinition.render = renderValidadorProducto;
                         columnDefinition.width = 200; // Ajusta el ancho si es necesario
                     }
+
+                    else if (key === 'detalle_sectorial') {
+                        columnDefinition.render = (text, record) => {
+                            return (
+                                <Select
+                                    showSearch
+                                    placeholder="Seleccione detalle sectorial"
+                                    style={{ width: 250 }}
+                                    value={record._detalleTouched ? record.detalle_sectorial || null : null}
+                                    onChange={(value) => {
+                                        // 1️⃣ Marcar como tocado y actualizar estado local
+                                        setDatosTabla(prev =>
+                                            prev.map(r => {
+                                                if (r.id === record.id) {
+                                                    // Buscar opción seleccionada
+                                                    const selectedOpt = (r._opcionesDetalleSectorial || []).find(opt => opt.detalle_sectorial === value);
+                                                    if (!selectedOpt) return r;
+
+                                                    return {
+                                                        ...r,
+                                                        detalle_sectorial: selectedOpt.detalle_sectorial,
+                                                        extrae_detalle_sectorial: selectedOpt.extrae_detalle_sectorial || "",
+                                                        detalle_sectorial_prog_gasto: selectedOpt.detalle_sectorial_prog_gasto || "",
+                                                        _detalleTouched: true
+                                                    };
+                                                }
+                                                return r;
+                                            })
+                                        );
+
+                                        // 2️⃣ Persistir cambios en backend
+                                        handleCellChange(record.id, 'detalle_sectorial', value);
+                                    }}
+                                    onOpenChange={async (open) => {
+                                        if (open && record.secretaria && (!record._opcionesDetalleSectorial || record._opcionesDetalleSectorial.length === 0)) {
+                                            try {
+                                                const res = await api.get(`/detalle-sectorial/${encodeURIComponent(record.secretaria)}`);
+                                                setDatosTabla(prev =>
+                                                    prev.map(r => r.id === record.id ? { ...r, _opcionesDetalleSectorial: res.data || [] } : r)
+                                                );
+                                            } catch (err) {
+                                                message.error('Error cargando opciones de detalle sectorial');
+                                            }
+                                        }
+                                    }}
+                                    allowClear
+                                >
+                                    <Option value="" disabled>Seleccione detalle sectorial</Option>
+                                    {(record._opcionesDetalleSectorial || []).map(opt => (
+                                        <Option key={opt.detalle_sectorial} value={opt.detalle_sectorial}>
+                                            {opt.detalle_sectorial}
+                                        </Option>
+                                    ))}
+                                </Select>
+                            );
+                        };
+                        columnDefinition.width = 280;
+                    }
+
+                    else if (key === 'extrae_detalle_sectorial' || key === 'detalle_sectorial_prog_gasto') {
+                        columnDefinition.render = (text, record) => {
+                            const displayValue = record._detalleTouched ? (text || "") : ""; // si no tocó, mostrar vacío
+                            return (
+                                <input
+                                    type="text"
+                                    value={displayValue}
+                                    readOnly
+                                    placeholder="Se llenará al seleccionar un detalle sectorial"
+                                    style={{
+                                        width: "100%",
+                                        border: "1px solid #d9d9d9",
+                                        borderRadius: 4,
+                                        padding: "4px 8px",
+                                        backgroundColor: "#fafafa"
+                                    }}
+                                />
+                            );
+                        };
+                        columnDefinition.width = 250;
+                    }
+
                     // producto_cuipo se mostrará como texto normal, su valor será actualizado por handleCellChange
-                    
                     return columnDefinition;
                 });
 
@@ -389,7 +472,9 @@ const EjecucionPresupuestal = () => {
                         cpc_cuipo: initialCpcCuipo,
                         validador_cpc: initialValidadorCpc,
                         producto_cuipo: initialProductoCuipo, // Asegúrate de que este campo exista en tu DB
-                        validador_del_producto: initialValidadorProducto // Asegúrate de que este campo exista en tu DB
+                        validador_del_producto: initialValidadorProducto, // Asegúrate de que este campo exista en tu DB
+                        _detalleTouched: false,
+                        _opcionesDetalleSectorial: row._opcionesDetalleSectorial || []
                     };
                 });
 
@@ -669,7 +754,7 @@ const EjecucionPresupuestal = () => {
                 style={{
                     marginTop: '20px',
                     borderRadius: '8px',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)'
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.07)'
                 }}
                 >
                 <Table
@@ -680,13 +765,13 @@ const EjecucionPresupuestal = () => {
                     { title: 'Nombre Proyecto', dataIndex: 'nombre_proyecto', key: 'nombre_proyecto' },
                     {
                         title: 'Total Ppto Inicial',
-                        dataIndex: 'ppto_inicial',
+                        dataIndex: 'total_ppto_inicial',
                         key: 'ppto_inicial',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Reducciones',
-                        dataIndex: 'reducciones',
+                        dataIndex: 'total_reducciones',
                         key: 'reducciones',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
@@ -704,7 +789,7 @@ const EjecucionPresupuestal = () => {
                     },
                     {
                         title: 'Total Contracréditos',
-                        dataIndex: 'contracreditos',
+                        dataIndex: 'total_contracreditos',
                         key: 'contracreditos',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
@@ -716,37 +801,37 @@ const EjecucionPresupuestal = () => {
                     },
                     {
                         title: 'Total Disponibilidad',
-                        dataIndex: 'disponibilidad',
+                        dataIndex: 'total_disponibilidad',
                         key: 'disponibilidad',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Compromiso',
-                        dataIndex: 'compromiso',
+                        dataIndex: 'total_compromiso',
                         key: 'compromiso',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Factura',
-                        dataIndex: 'factura',
+                        dataIndex: 'total_factura',
                         key: 'factura',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Pagos',
-                        dataIndex: 'pagos',
+                        dataIndex: 'total_pagos',
                         key: 'pagos',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Disponible Neto',
-                        dataIndex: 'disponible_neto',
+                        dataIndex: 'total_disponible_neto',
                         key: 'disponible_neto',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
                     {
                         title: 'Total Ejecución',
-                        dataIndex: 'ejecucion',
+                        dataIndex: 'total_ejecucion',
                         key: 'ejecucion',
                         render: (value) => Number(value).toLocaleString('es-CO')
                     },
