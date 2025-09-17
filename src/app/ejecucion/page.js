@@ -183,74 +183,71 @@ const EjecucionPresupuestal = () => {
 
     // LÓGICA CLAVE: handleCellChange actualizado para CPC y Producto MGA
     const handleCellChange = useCallback(async (recordId, key, value) => {
-        let updatedRow = null;
+        let fieldsToPersist = { id: recordId };
 
-        // Primero, actualizamos el estado local y obtenemos la fila modificada
+        // 1. Actualiza el estado de la UI de forma centralizada
         setDatosTabla(prevDatos => {
             return prevDatos.map(row => {
                 if (row.id === recordId) {
-                    updatedRow = { ...row, [key]: value };
+                    let updatedRow;
+                    // Si es Detalle Sectorial, el 'value' es un objeto completo. Lo fusionamos.
+                    if (key === 'detalle_sectorial' && typeof value === 'object' && value !== null) {
+                        updatedRow = { ...row, ...value };
+                        // Preparamos el payload para persistir desde el objeto 'value'
+                        fieldsToPersist.detalle_sectorial = value.detalle_sectorial;
+                        fieldsToPersist.extrae_detalle_sectorial = value.extrae_detalle_sectorial;
+                        fieldsToPersist.detalle_sectorial_prog_gasto = value.detalle_sectorial_prog_gasto;
+                    } else {
+                        // Para CPC, MGA y otros, funciona como siempre.
+                        updatedRow = { ...row, [key]: value };
 
-                    // Lógica para CPC
-                    if (key === 'codigo_y_nombre_del_cpc') {
-                        const newCpcCuipo = calcularCpcCuipo(value);
-                        const newValidadorCpc = calcularValidadorCpc(value, updatedRow.pospre_cuipo);
-
-                        updatedRow.cpc_cuipo = newCpcCuipo ? newCpcCuipo : 0;
-                        updatedRow.validador_cpc = newValidadorCpc;
+                        if (key === 'codigo_y_nombre_del_cpc') {
+                            const newCpcCuipo = calcularCpcCuipo(value);
+                            const newValidadorCpc = calcularValidadorCpc(value, updatedRow.pospre_cuipo);
+                            updatedRow.cpc_cuipo = newCpcCuipo ? newCpcCuipo : 0;
+                            updatedRow.validador_cpc = newValidadorCpc;
+                            // Preparamos el payload para persistir
+                            fieldsToPersist.codigo_y_nombre_del_cpc = updatedRow.codigo_y_nombre_del_cpc;
+                            fieldsToPersist.cpc_cuipo = updatedRow.cpc_cuipo;
+                            fieldsToPersist.validador_cpc = updatedRow.validador_cpc;
+                        }
+                        else if (key === 'codigo_y_nombre_del_producto_mga') {
+                            const newProductoCuipo = calcularProductoCuipo(value);
+                            const newValidadorProducto = calcularValidadorProducto(value, row.producto_ppal, row.sector_cuipo);
+                            updatedRow.producto_cuipo = newProductoCuipo;
+                            updatedRow.validador_del_producto = newValidadorProducto;
+                            // Preparamos el payload para persistir
+                            fieldsToPersist.codigo_y_nombre_del_producto_mga = updatedRow.codigo_y_nombre_del_producto_mga;
+                            fieldsToPersist.producto_cuipo = updatedRow.producto_cuipo;
+                            fieldsToPersist.validador_del_producto = updatedRow.validador_del_producto;
+                        } else {
+                            fieldsToPersist[key] = value;
+                        }
                     }
-                    // Lógica para Producto MGA
-                    else if (key === 'codigo_y_nombre_del_producto_mga') {
-                        const newProductoCuipo = calcularProductoCuipo(value);
-                        const newValidadorProducto = calcularValidadorProducto(value, row.producto_ppal, row.sector_cuipo);
-
-                        updatedRow.producto_cuipo = newProductoCuipo;
-                        updatedRow.validador_del_producto = newValidadorProducto;
-                    }
-
                     return updatedRow;
                 }
                 return row;
             });
         });
 
-        // Persistir cambios en backend
-        if (updatedRow) {
+        // 2. Persiste los datos en el backend (después de una breve espera para asegurar la actualización del estado)
+        // Usamos un setTimeout de 0 para mover la persistencia al final de la cola de ejecución, 
+        // dando tiempo a React para procesar la actualización del estado.
+        setTimeout(async () => {
             try {
-                const fieldsToUpdate = { id: recordId };
-
-                // Si es CPC
-                if (key === 'codigo_y_nombre_del_cpc') {
-                    fieldsToUpdate[key] = updatedRow[key];
-                    fieldsToUpdate.cpc_cuipo = updatedRow.cpc_cuipo;
-                    fieldsToUpdate.validador_cpc = updatedRow.validador_cpc;
+                console.log("Payload enviado:", fieldsToPersist);
+                if (Object.keys(fieldsToPersist).length <= 1) {
+                    // No enviar si solo contiene el id
+                    console.log("No hay campos para actualizar, se omite la llamada a la API.");
+                    return;
                 }
-                // Si es Producto MGA
-                else if (key === 'codigo_y_nombre_del_producto_mga') {
-                    fieldsToUpdate[key] = updatedRow[key];
-                    fieldsToUpdate.producto_cuipo = updatedRow.producto_cuipo;
-                    fieldsToUpdate.validador_del_producto = updatedRow.validador_del_producto;
-                }
-                // Si es Detalle Sectorial
-                else if (key === 'detalle_sectorial') {
-                    fieldsToUpdate.detalle_sectorial = updatedRow.detalle_sectorial;
-                    fieldsToUpdate.extrae_detalle_sectorial = updatedRow.extrae_detalle_sectorial;
-                    fieldsToUpdate.detalle_sectorial_prog_gasto = updatedRow.detalle_sectorial_prog_gasto;
-                }
-                // Otros campos editables simples
-                else {
-                    fieldsToUpdate[key] = updatedRow[key];
-                }
-
-                console.log("Payload enviado:", fieldsToUpdate);
-
-                await api.post('/ejecucion/actualizar-fila', fieldsToUpdate);
+                await api.post('/ejecucion/actualizar-fila', fieldsToPersist);
                 message.success('Campo actualizado exitosamente en la base de datos.');
             } catch (error) {
                 console.error('Error al persistir el cambio en la base de datos:', error);
                 message.error(`Error al guardar el cambio: ${error.response?.data?.error || error.message}`);
             }
-        }
+        }, 0);
     }, []); // Dependencias vacías porque las funciones de cálculo son externas y estables
 
     // Render para la columna validador_cpc (solo visualización)
@@ -380,32 +377,41 @@ const EjecucionPresupuestal = () => {
                                     showSearch
                                     placeholder="Seleccione detalle sectorial"
                                     style={{ width: 250 }}
-                                    value={record._detalleTouched ? record.detalle_sectorial || null : null}
+                                    // --- ARREGLO 1: Volvemos a tu lógica original para el valor ---
+                                    // Esto soluciona el problema del "valor por defecto".
+                                    value={record.detalle_sectorial || null}
+                                    
                                     onChange={(value) => {
-                                        // 1️⃣ Marcar como tocado y actualizar estado local
-                                        setDatosTabla(prev =>
-                                            prev.map(r => {
-                                                if (r.id === record.id) {
-                                                    // Buscar opción seleccionada
-                                                    const selectedOpt = (r._opcionesDetalleSectorial || []).find(opt => opt.detalle_sectorial === value);
-                                                    if (!selectedOpt) return r;
+                                        // --- ARREGLO 2: La lógica se simplifica ---
+                                        // Ya no llamamos a setDatosTabla aquí.
+                                        const selectedOpt = (record._opcionesDetalleSectorial || []).find(opt => opt.detalle_sectorial === value);
 
-                                                    return {
-                                                        ...r,
-                                                        detalle_sectorial: selectedOpt.detalle_sectorial,
-                                                        extrae_detalle_sectorial: selectedOpt.extrae_detalle_sectorial || "",
-                                                        detalle_sectorial_prog_gasto: selectedOpt.detalle_sectorial_prog_gasto || "",
-                                                        _detalleTouched: true
-                                                    };
-                                                }
-                                                return r;
-                                            })
-                                        );
+                                        // Si se borra la selección, llama al handler con valores vacíos
+                                        if (!selectedOpt) {
+                                            const emptyValues = {
+                                                detalle_sectorial: null,
+                                                extrae_detalle_sectorial: "",
+                                                detalle_sectorial_prog_gasto: "",
+                                                _detalleTouched: true
+                                            };
+                                            handleCellChange(record.id, 'detalle_sectorial', emptyValues);
+                                            return;
+                                        }
 
-                                        // 2️⃣ Persistir cambios en backend
-                                        handleCellChange(record.id, 'detalle_sectorial', value);
+                                        // Si se elige una opción, prepara el paquete de datos completo
+                                        const newValues = {
+                                            detalle_sectorial: selectedOpt.detalle_sectorial,
+                                            extrae_detalle_sectorial: selectedOpt.extrae_detalle_sectorial || "",
+                                            detalle_sectorial_prog_gasto: selectedOpt.detalle_sectorial_prog_gasto || "",
+                                            _detalleTouched: true
+                                        };
+                                        
+                                        // Llama a handleCellChange con el paquete completo.
+                                        // Esta es la única llamada que importa.
+                                        handleCellChange(record.id, 'detalle_sectorial', newValues);
                                     }}
                                     onOpenChange={async (open) => {
+                                        // (Tu código onOpenChange se mantiene exactamente igual)
                                         if (open && record.secretaria && (!record._opcionesDetalleSectorial || record._opcionesDetalleSectorial.length === 0)) {
                                             try {
                                                 const res = await api.get(`/detalle-sectorial/${encodeURIComponent(record.secretaria)}`);
@@ -419,6 +425,7 @@ const EjecucionPresupuestal = () => {
                                     }}
                                     allowClear
                                 >
+                                    {/* (Tus Options se mantienen exactamente igual) */}
                                     <Option value="" disabled>Seleccione detalle sectorial</Option>
                                     {(record._opcionesDetalleSectorial || []).map(opt => (
                                         <Option key={opt.detalle_sectorial} value={opt.detalle_sectorial}>
@@ -433,13 +440,17 @@ const EjecucionPresupuestal = () => {
 
                     else if (key === 'extrae_detalle_sectorial' || key === 'detalle_sectorial_prog_gasto') {
                         columnDefinition.render = (text, record) => {
-                            const displayValue = record._detalleTouched ? (text || "") : ""; // si no tocó, mostrar vacío
+                            // --- LÓGICA CORREGIDA Y SIMPLIFICADA ---
+                            // Simplemente usa el valor 'text' que la tabla le pasa a la celda.
+                            // Si 'text' es null o undefined, se convertirá en una cadena vacía.
+                            const displayValue = text || "";
+
                             return (
                                 <input
                                     type="text"
                                     value={displayValue}
                                     readOnly
-                                    placeholder="Se llenará al seleccionar un detalle sectorial"
+                                    placeholder="Se llenará al seleccionar un detalle"
                                     style={{
                                         width: "100%",
                                         border: "1px solid #d9d9d9",
