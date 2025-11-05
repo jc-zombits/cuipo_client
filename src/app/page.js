@@ -250,80 +250,92 @@ export default function PresupuestoGrafica() {
             return [];
         }
 
-        // Primero, agregamos todos los datos disponibles
-        const aggregatedData = {};
+        // --- Paso 1: Agregamos los datos por clave única ---
+        const aggregatedDataMap = new Map();
         proyectosPorSecretariaData.forEach(item => {
+            // La clave única que ya usabas para agrupar
             const key = item.centro_gestor && item.dependencia_nombre_completo
             ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
             : item.secretaria || 'Sin Secretaría';
         
-            if (!aggregatedData[key]) {
-                aggregatedData[key] = {
+            if (!aggregatedDataMap.has(key)) {
+                aggregatedDataMap.set(key, {
                     secretaria: item.secretaria,
                     centro_gestor: item.centro_gestor,
                     dependencia_nombre_completo: item.dependencia_nombre_completo,
                     total_proyectos: 0,
-                };
+                });
             }
-            aggregatedData[key].total_proyectos += parseInt(item.total_proyectos || 0);
+            aggregatedDataMap.get(key).total_proyectos += parseInt(item.total_proyectos || 0);
         });
 
-        // Luego, filtramos según el rol y la selección
-        let filteredData = Object.values(aggregatedData);
+        let aggregatedArray = Array.from(aggregatedDataMap.values());
 
-        // Si hay un filtro de secretaría seleccionado, aplicarlo independientemente del rol
+        // --- Paso 2: Aplicamos el filtro sobre los datos ya agregados ---
         if (selectedSecretariaFilter) {
-            filteredData = filteredData.filter(item => {
+            return aggregatedArray.filter(item => {
                 const itemKey = item.centro_gestor && item.dependencia_nombre_completo
                     ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
                     : item.secretaria;
-                return itemKey === selectedSecretariaFilter; // ✅ Filtra por clave COMPLETA
+                return itemKey === selectedSecretariaFilter;
             });
         }
-        // Si no hay filtro seleccionado y es un usuario normal con dependencia, filtrar por su dependencia
-        else if (!isAdmin() && !isJuanLaver() && user?.dependencyName) {
-            filteredData = filteredData.filter(item => {
+        
+        // Tu lógica de filtrado por rol (si no hay filtro seleccionado) no cambia
+        if (!isAdmin() && !isJuanLaver() && user?.dependencyName) {
+            return aggregatedArray.filter(item => {
                 const itemKey = item.centro_gestor && item.dependencia_nombre_completo
                     ? `${item.centro_gestor} - ${item.dependencia_nombre_completo}`
                     : item.secretaria;
                 return itemKey === user.dependencyName || 
-                       (item.dependencia_nombre_completo && item.dependencia_nombre_completo.includes(user.dependencyName)) ||
-                       (item.secretaria && item.secretaria.includes(user.dependencyName));
+                        (item.dependencia_nombre_completo && item.dependencia_nombre_completo.includes(user.dependencyName)) ||
+                        (item.secretaria && item.secretaria.includes(user.dependencyName));
             });
         }
 
-        return filteredData;
+        return aggregatedArray; // Devuelve todos los datos agregados si no hay filtro
     }, [proyectosPorSecretariaData, selectedSecretariaFilter, user, isAdmin, isJuanLaver]);
 
     const secretariasOptionsForSelect = useMemo(() => {
+        // Tomamos los datos directamente de filteredProyectosPorSecretaria ANTES de que se le aplique el filtro de selección
+        // Para ello, rehacemos la agregación aquí de forma temporal y ligera.
         if (!proyectosPorSecretariaData || proyectosPorSecretariaData.length === 0) {
             return [];
         }
-
-        // Crear opciones con valor completo y label (nombre)
+        
         const optionsMap = new Map();
 
+        // TU LÓGICA ORIGINAL PARA CREAR EL MAPA, ¡QUE ES CORRECTA!
         proyectosPorSecretariaData.forEach(d => {
-            // Crear la clave completa (como estaba antes)
             const fullKey = d.centro_gestor && d.dependencia_nombre_completo
                 ? `${d.centro_gestor} - ${d.dependencia_nombre_completo}`
                 : d.secretaria || 'Sin Secretaría';
 
-            // Usar solo el nombre para mostrar
             const displayName = d.secretaria || d.dependencia_nombre_completo || 'Sin Nombre';
 
-            // Agregar al Map para evitar duplicados
             if (!optionsMap.has(fullKey)) {
                 optionsMap.set(fullKey, {
-                    value: fullKey,    // ✅ Valor completo para filtrar
-                    label: displayName // ✅ Solo nombre para mostrar
+                    value: fullKey,
+                    label: displayName
                 });
             }
         });
 
-        const sortedOptions = Array.from(optionsMap.values())
+        // --- LA SOLUCIÓN AL DUPLICADO VISUAL ---
+        // Ahora, creamos un segundo mapa para asegurarnos de que cada 'label' sea único
+        const uniqueLabelMap = new Map();
+        optionsMap.forEach(option => {
+            // Si no hemos visto esta etiqueta (ej: 'INDER') antes, la guardamos
+            if (!uniqueLabelMap.has(option.label)) {
+                uniqueLabelMap.set(option.label, option);
+            }
+        });
+        
+        // Convertimos el mapa de etiquetas únicas a un array y lo ordenamos
+        const sortedOptions = Array.from(uniqueLabelMap.values())
             .sort((a, b) => a.label.localeCompare(b.label));
 
+        // El resto de tu lógica de filtrado por rol se mantiene intacta
         if (isAdmin() || isJuanLaver()) {
             return sortedOptions;
         }
@@ -450,14 +462,14 @@ export default function PresupuestoGrafica() {
         "pagos": "Pagos",
         "disponible_neto": "Disponible Neto",
         "ejecucion": "Ejecución (Monto)",
-        "_ejecucion": "Ejecución (%)"
+        "ejecucion_1": "Ejecución (%)"
     };
 
     // Función para formatear el valor para mostrar en el modal
     const formatModalValue = (key, value) => {
         if (value === null || value === undefined || value === '') return 'N/A'; // Manejar valores nulos/vacíos
 
-        const isPercentage = key === '_ejecucion';
+        const isPercentage = key === 'ejecucion_1';
         const isMoney = !isPercentage && ['ppto_inicial', 'reducciones', 'adiciones', 'creditos', 'contracreditos', 'total_ppto_actual', 'disponibilidad', 'compromiso', 'factura', 'pagos', 'disponible_neto', 'ejecucion'].includes(key);
 
         const parsedValue = parseFloat(value); // El valor ya debe estar limpio de comas aquí
@@ -643,7 +655,7 @@ export default function PresupuestoGrafica() {
                         parseFormattedNumber(detalleData[0].total_ppto_actual),
                         parseFormattedNumber(detalleData[0].disponibilidad),
                         parseFormattedNumber(detalleData[0].disponible_neto),
-                        parseFormattedNumber(detalleData[0]._ejecucion)
+                        parseFormattedNumber(detalleData[0].ejecucion_1)
                     ]
                     : [],
                 color: '#F28E2B'

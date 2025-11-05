@@ -94,7 +94,7 @@ const EjecucionPresupuestal = () => {
     const camposPresupuestalesResaltar = [
         'ppto_inicial', 'reducciones', 'adiciones', 'creditos', 'contracreditos',
         'total_ppto_actual', 'disponibilidad', 'compromiso', 'factura', 'pagos',
-        'disponible_neto', 'ejecucion', '_ejecucion',
+        'disponible_neto', 'ejecucion', 'ejecucion_1',
         'fondo', 'fuente', 'fuente_cuipo', 'vigencia_gasto', 'situacion_de_fondos',
         'centro_gestor', 'seccion_ptal_cuipo', 'tercero_cuipo', 'secretaria',
         'pospre', 'validacion_pospre', 'pospre_cuipo',
@@ -575,7 +575,7 @@ const EjecucionPresupuestal = () => {
     };
 
     const handleTraerDatosYCopiar = async () => {
-        const tablaOrigen = 'base_de_ejecucion_presupuestal_30062025';
+        const tablaOrigen = 'base_de_ejecucion_presupuestal';
         const tablaDestino = 'cuipo_plantilla_distrito_2025_vf';
 
         if (!tablasDisponibles.includes(tablaOrigen) || !tablasDisponibles.includes(tablaDestino)) {
